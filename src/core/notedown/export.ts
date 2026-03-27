@@ -53,18 +53,31 @@ export const buildStaticSiteZip = async (collectionId: string) => {
 
   const fs = await import("fs/promises");
   const path = await import("path");
-  const { createRequire } = await import("module");
-  const nodeRequire = createRequire(path.join(process.cwd(), "package.json"));
-  const katexPackageJsonPath = nodeRequire.resolve("katex/package.json");
-  const normalizedKatexPackagePath = katexPackageJsonPath.startsWith("(rsc)/")
-    ? path.join(process.cwd(), katexPackageJsonPath.replace(/^\(rsc\)\//, ""))
-    : katexPackageJsonPath;
-  const katexPackageRoot = path.dirname(normalizedKatexPackagePath);
-  const katexDistDir = path.join(katexPackageRoot, "dist");
+
+  const candidateKatexRoots = [
+    path.join(process.cwd(), "node_modules", "katex"),
+    path.join(process.cwd(), ".next", "server", "node_modules", "katex"),
+  ];
+
+  let katexDistDir: string | null = null;
+  for (const candidateRoot of candidateKatexRoots) {
+    const distCandidate = path.join(candidateRoot, "dist");
+    try {
+      await fs.access(path.join(distCandidate, "katex.min.css"));
+      await fs.access(path.join(distCandidate, "fonts"));
+      katexDistDir = distCandidate;
+      break;
+    } catch {
+      // try next location
+    }
+  }
+
+  if (!katexDistDir) {
+    throw new Error("KaTeX dist assets not found in known node_modules locations");
+  }
+
   const katexCssPath = path.join(katexDistDir, "katex.min.css");
   const katexFontsDir = path.join(katexDistDir, "fonts");
-  await fs.access(katexCssPath);
-  await fs.access(katexFontsDir);
   zip.file("assets/katex.min.css", await fs.readFile(katexCssPath, "utf8"));
   for (const font of await fs.readdir(katexFontsDir)) {
     const full = path.join(katexFontsDir, font);
