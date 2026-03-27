@@ -5,7 +5,7 @@ import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
-import { NotesCollection, RenderedDoc } from "./types";
+import { NotesCollection, RenderedSite, RenderedSiteDoc } from "./types";
 
 export type MarkdownRendererPlugin = (pipeline: ReturnType<typeof unified>) => ReturnType<typeof unified>;
 
@@ -30,24 +30,40 @@ export const createMarkdownRenderer = (plugins: MarkdownRendererPlugin[] = []) =
   };
 };
 
-export const renderCollection = async (collection: NotesCollection) => {
+export const renderCollection = async (collection: NotesCollection): Promise<RenderedSite> => {
   const renderer = createMarkdownRenderer();
-  const docs: RenderedDoc[] = [];
+  const ordered = [...collection.docs].sort((a, b) => a.meta.order - b.meta.order);
 
-  for (const doc of collection.docs.sort((a, b) => a.meta.order - b.meta.order)) {
-    docs.push({
+  const docs: RenderedSiteDoc[] = await Promise.all(
+    ordered.map(async (doc, index) => ({
       slug: doc.meta.slug,
       title: doc.meta.title,
       order: doc.meta.order,
-      html: await renderer.render(doc.markdown)
-    });
-  }
+      html: await renderer.render(doc.markdown),
+      previous:
+        index > 0
+          ? {
+              slug: ordered[index - 1].meta.slug,
+              title: ordered[index - 1].meta.title
+            }
+          : null,
+      next:
+        index < ordered.length - 1
+          ? {
+              slug: ordered[index + 1].meta.slug,
+              title: ordered[index + 1].meta.title
+            }
+          : null,
+      overviewHref: "index.html"
+    }))
+  );
 
   return {
     collection: {
       id: collection.manifest.id,
       title: collection.manifest.title,
-      description: collection.manifest.description
+      description: collection.manifest.description,
+      overviewHref: "index.html"
     },
     docs
   };

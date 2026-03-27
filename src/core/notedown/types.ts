@@ -24,9 +24,27 @@ export type NotesCollection = {
   docs: NotesDoc[];
 };
 
-export type RenderedDoc = {
+export type RenderedSiteLink = {
   slug: string;
   title: string;
-  html: string;
+};
+
+export type RenderedSiteDoc = {
+  slug: string;
+  title: string;
   order: number;
+  html: string;
+  previous: RenderedSiteLink | null;
+  next: RenderedSiteLink | null;
+  overviewHref: string;
+};
+
+export type RenderedSite = {
+  collection: {
+    id: string;
+    title: string;
+    description: string;
+    overviewHref: string;
+  };
+  docs: RenderedSiteDoc[];
 };

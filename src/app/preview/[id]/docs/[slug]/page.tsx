@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { renderCollection } from "@/core/notedown/rendering";
+import { DOCUMENT_SITE_CSS } from "@/core/notedown/site-theme";
 import { getCollection } from "@/core/notedown/storage";
-import { createMarkdownRenderer } from "@/core/notedown/rendering";
 
 export default async function PreviewDocPage({
   params
@@ -12,39 +13,31 @@ export default async function PreviewDocPage({
   const collection = await getCollection(id);
   if (!collection) notFound();
 
-  const currentIndex = collection.docs.findIndex((doc) => doc.meta.slug === slug);
-  if (currentIndex === -1) notFound();
-
-  const current = collection.docs[currentIndex];
-  const prev = collection.docs[currentIndex - 1];
-  const next = collection.docs[currentIndex + 1];
-  const renderer = createMarkdownRenderer();
-  const html = await renderer.render(current.markdown);
+  const rendered = await renderCollection(collection);
+  const current = rendered.docs.find((doc) => doc.slug === slug);
+  if (!current) notFound();
 
   return (
-    <main className="mx-auto max-w-4xl bg-white p-8">
-      <nav className="mb-4 text-sm">
-        <Link className="text-blue-700" href={`/preview/${id}`}>
-          ← Home
-        </Link>
-      </nav>
-      <article className="prose max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
-      <div className="mt-8 flex justify-between text-sm">
-        {prev ? (
-          <Link className="text-blue-700" href={`/preview/${id}/docs/${prev.meta.slug}`}>
-            ← {prev.meta.title}
-          </Link>
-        ) : (
-          <span />
-        )}
-        {next ? (
-          <Link className="text-blue-700" href={`/preview/${id}/docs/${next.meta.slug}`}>
-            {next.meta.title} →
-          </Link>
-        ) : (
-          <span />
-        )}
-      </div>
-    </main>
+    <>
+      <style>{DOCUMENT_SITE_CSS}</style>
+      <main className="nd-page">
+        <nav className="nd-nav">
+          <Link href={`/preview/${id}`}>← Home</Link>
+        </nav>
+        <article className="markdown-body" dangerouslySetInnerHTML={{ __html: current.html }} />
+        <div className="nd-nav-grid">
+          {current.previous ? (
+            <Link href={`/preview/${id}/docs/${current.previous.slug}`}>← {current.previous.title}</Link>
+          ) : (
+            <span />
+          )}
+          {current.next ? (
+            <Link href={`/preview/${id}/docs/${current.next.slug}`}>{current.next.title} →</Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      </main>
+    </>
   );
 }

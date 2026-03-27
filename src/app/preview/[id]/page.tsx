@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { renderCollection } from "@/core/notedown/rendering";
+import { DOCUMENT_SITE_CSS } from "@/core/notedown/site-theme";
 import { getCollection } from "@/core/notedown/storage";
 
 export default async function CollectionPreviewHome({ params }: { params: Promise<{ id: string }> }) {
@@ -7,24 +9,25 @@ export default async function CollectionPreviewHome({ params }: { params: Promis
   const collection = await getCollection(id);
   if (!collection) notFound();
 
+  const rendered = await renderCollection(collection);
+
   return (
-    <main className="mx-auto max-w-4xl bg-white p-8">
-      <nav className="mb-4 text-sm">
-        <Link className="text-blue-700" href={`/collections/${id}`}>
-          ← Back to workspace
-        </Link>
-      </nav>
-      <h1 className="text-3xl font-bold">{collection.manifest.title}</h1>
-      <p className="mb-6 mt-2 text-slate-600">{collection.manifest.description}</p>
-      <ol className="list-decimal space-y-2 pl-6">
-        {collection.manifest.docs.map((doc) => (
-          <li key={doc.slug}>
-            <Link className="text-blue-700" href={`/preview/${id}/docs/${doc.slug}`}>
-              {doc.title}
-            </Link>
-          </li>
-        ))}
-      </ol>
-    </main>
+    <>
+      <style>{DOCUMENT_SITE_CSS}</style>
+      <main className="nd-page">
+        <nav className="nd-nav">
+          <Link href={`/collections/${id}`}>← Back to workspace</Link>
+        </nav>
+        <h1>{rendered.collection.title}</h1>
+        <p>{rendered.collection.description}</p>
+        <ol className="nd-doc-list">
+          {rendered.docs.map((doc) => (
+            <li key={doc.slug}>
+              <Link href={`/preview/${id}/docs/${doc.slug}`}>{doc.title}</Link>
+            </li>
+          ))}
+        </ol>
+      </main>
+    </>
   );
 }
