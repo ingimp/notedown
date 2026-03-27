@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LivePreview } from "@/components/live-preview";
 
 export function WorkspaceClient({ initialMarkdown }: { initialMarkdown: string }) {
   const [markdown, setMarkdown] = useState(initialMarkdown);
+
+  useEffect(() => {
+    setMarkdown(initialMarkdown);
+  }, [initialMarkdown]);
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">

@@ -84,7 +84,7 @@ export default async function CollectionWorkspacePage({
             <form action={handleSaveDoc} className="space-y-3">
               <input type="hidden" name="slug" value={selected.meta.slug} />
               <p className="text-sm font-medium">Editing: {selected.meta.title}</p>
-              <WorkspaceClient initialMarkdown={selected.markdown} />
+              <WorkspaceClient key={selected.meta.slug} initialMarkdown={selected.markdown} />
               <button className="rounded bg-blue-700 px-4 py-2 text-white" type="submit">
                 Save document
               </button>

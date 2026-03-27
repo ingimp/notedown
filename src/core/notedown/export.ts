@@ -51,13 +51,12 @@ export const buildStaticSiteZip = async (collectionId: string) => {
 
   zip.file("assets/site.css", DOCUMENT_SITE_CSS);
 
-  const katexCssPath = require.resolve("katex/dist/katex.min.css");
-  const katexFontsDir = require.resolve("katex/dist/fonts/KaTeX_Main-Regular.woff2").replace(
-    /KaTeX_Main-Regular\.woff2$/,
-    ""
-  );
   const fs = await import("fs/promises");
   const path = await import("path");
+  const katexPackageRoot = path.dirname(require.resolve("katex/package.json"));
+  const katexDistDir = path.join(katexPackageRoot, "dist");
+  const katexCssPath = path.join(katexDistDir, "katex.min.css");
+  const katexFontsDir = path.join(katexDistDir, "fonts");
   zip.file("assets/katex.min.css", await fs.readFile(katexCssPath, "utf8"));
   for (const font of await fs.readdir(katexFontsDir)) {
     const full = path.join(katexFontsDir, font);
