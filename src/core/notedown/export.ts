@@ -53,10 +53,18 @@ export const buildStaticSiteZip = async (collectionId: string) => {
 
   const fs = await import("fs/promises");
   const path = await import("path");
-  const katexPackageRoot = path.dirname(require.resolve("katex/package.json"));
+  const { createRequire } = await import("module");
+  const nodeRequire = createRequire(path.join(process.cwd(), "package.json"));
+  const katexPackageJsonPath = nodeRequire.resolve("katex/package.json");
+  const normalizedKatexPackagePath = katexPackageJsonPath.startsWith("(rsc)/")
+    ? path.join(process.cwd(), katexPackageJsonPath.replace(/^\(rsc\)\//, ""))
+    : katexPackageJsonPath;
+  const katexPackageRoot = path.dirname(normalizedKatexPackagePath);
   const katexDistDir = path.join(katexPackageRoot, "dist");
   const katexCssPath = path.join(katexDistDir, "katex.min.css");
   const katexFontsDir = path.join(katexDistDir, "fonts");
+  await fs.access(katexCssPath);
+  await fs.access(katexFontsDir);
   zip.file("assets/katex.min.css", await fs.readFile(katexCssPath, "utf8"));
   for (const font of await fs.readdir(katexFontsDir)) {
     const full = path.join(katexFontsDir, font);
