@@ -1,8 +1,23 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PublicationLayout, buildPublicationLayoutModel } from "@/core/notedown/layout";
 import { renderCollection } from "@/core/notedown/rendering";
-import { DOCUMENT_SITE_CSS } from "@/core/notedown/site-theme";
 import { getCollection } from "@/core/notedown/storage";
+
+const NextLinkComponent = ({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <Link href={href} className={className}>
+    {children}
+  </Link>
+);
 
 export default async function CollectionPreviewHome({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,24 +25,30 @@ export default async function CollectionPreviewHome({ params }: { params: Promis
   if (!collection) notFound();
 
   const rendered = await renderCollection(collection);
+  const firstDoc = rendered.docs[0];
+  if (!firstDoc) {
+    return (
+      <main className="mx-auto max-w-3xl p-8">
+        <link rel="stylesheet" href="/assets/site.css" />
+        <p>This publication has no documents yet.</p>
+      </main>
+    );
+  }
+
+  const model = buildPublicationLayoutModel({
+    publication: { title: rendered.collection.title },
+    orderedDocuments: rendered.docs.map((doc) => ({ slug: doc.slug, title: doc.title, html: doc.html })),
+    currentDocument: { slug: firstDoc.slug, title: firstDoc.title, html: firstDoc.html },
+    linkStrategy: {
+      rootHref: `/preview/${id}`,
+      docHref: (slug) => `/preview/${id}/docs/${slug}`,
+    },
+  });
 
   return (
     <>
-      <style>{DOCUMENT_SITE_CSS}</style>
-      <main className="nd-page">
-        <nav className="nd-nav">
-          <Link href={`/collections/${id}`}>← Back to collection</Link>
-        </nav>
-        <h1>{rendered.collection.title}</h1>
-        <p>{rendered.collection.description}</p>
-        <ol className="nd-doc-list">
-          {rendered.docs.map((doc) => (
-            <li key={doc.slug}>
-              <Link href={`/preview/${id}/docs/${doc.slug}`}>{doc.title}</Link>
-            </li>
-          ))}
-        </ol>
-      </main>
+      <link rel="stylesheet" href="/assets/site.css" />
+      <PublicationLayout model={model} LinkComponent={NextLinkComponent} />
     </>
   );
 }

@@ -1,11 +1,26 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PublicationLayout, buildPublicationLayoutModel } from "@/core/notedown/layout";
 import { renderCollection } from "@/core/notedown/rendering";
-import { DOCUMENT_SITE_CSS } from "@/core/notedown/site-theme";
 import { getCollection } from "@/core/notedown/storage";
 
+const NextLinkComponent = ({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <Link href={href} className={className}>
+    {children}
+  </Link>
+);
+
 export default async function PreviewDocPage({
-  params
+  params,
 }: {
   params: Promise<{ id: string; slug: string }>;
 }) {
@@ -17,27 +32,20 @@ export default async function PreviewDocPage({
   const current = rendered.docs.find((doc) => doc.slug === slug);
   if (!current) notFound();
 
+  const model = buildPublicationLayoutModel({
+    publication: { title: rendered.collection.title },
+    orderedDocuments: rendered.docs.map((doc) => ({ slug: doc.slug, title: doc.title, html: doc.html })),
+    currentDocument: { slug: current.slug, title: current.title, html: current.html },
+    linkStrategy: {
+      rootHref: `/preview/${id}`,
+      docHref: (currentSlug) => `/preview/${id}/docs/${currentSlug}`,
+    },
+  });
+
   return (
     <>
-      <style>{DOCUMENT_SITE_CSS}</style>
-      <main className="nd-page">
-        <nav className="nd-nav">
-          <Link href={`/preview/${id}`}>← Home</Link>
-        </nav>
-        <article className="markdown-body" dangerouslySetInnerHTML={{ __html: current.html }} />
-        <div className="nd-nav-grid">
-          {current.previous ? (
-            <Link href={`/preview/${id}/docs/${current.previous.slug}`}>← {current.previous.title}</Link>
-          ) : (
-            <span />
-          )}
-          {current.next ? (
-            <Link href={`/preview/${id}/docs/${current.next.slug}`}>{current.next.title} →</Link>
-          ) : (
-            <span />
-          )}
-        </div>
-      </main>
+      <link rel="stylesheet" href="/assets/site.css" />
+      <PublicationLayout model={model} LinkComponent={NextLinkComponent} />
     </>
   );
 }

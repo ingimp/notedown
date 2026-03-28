@@ -1,9 +1,10 @@
 import JSZip from "jszip";
+import { buildPublicationLayoutModel, renderPublicationLayoutHtml } from "./layout";
 import { renderCollection } from "./rendering";
 import { getCollection } from "./storage";
 import { DOCUMENT_SITE_CSS } from "./site-theme";
 
-const layout = (title: string, body: string, assetPrefix = "") => `<!doctype html>
+const htmlDocument = (title: string, body: string, assetPrefix = "") => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -22,31 +23,42 @@ export const buildStaticSiteZip = async (collectionId: string) => {
   if (!collection) throw new Error("Collection not found");
 
   const rendered = await renderCollection(collection);
-  const zip = new JSZip();
+  const orderedDocuments = rendered.docs.map((doc) => ({
+    slug: doc.slug,
+    title: doc.title,
+    html: doc.html,
+  }));
 
-  zip.file(
-    "index.html",
-    layout(
-      rendered.collection.title,
-      `<main class="nd-page"><h1>${rendered.collection.title}</h1><p>${rendered.collection.description}</p><ol class="nd-doc-list">${rendered.docs
-        .map((doc) => `<li><a href="docs/${doc.slug}.html">${doc.title}</a></li>`)
-        .join("")}</ol></main>`
-    )
-  );
+  if (orderedDocuments.length === 0) {
+    throw new Error("Cannot export an empty publication");
+  }
+
+  const zip = new JSZip();
+  const firstDoc = orderedDocuments[0];
+
+  const renderPage = (currentSlug: string, assetPrefix = "") => {
+    const currentDocument = orderedDocuments.find((doc) => doc.slug === currentSlug) ?? firstDoc;
+    const model = buildPublicationLayoutModel({
+      publication: { title: rendered.collection.title },
+      orderedDocuments,
+      currentDocument,
+      linkStrategy: {
+        rootHref: `${assetPrefix}index.html`,
+        docHref: (slug) => `${assetPrefix}docs/${slug}.html`,
+      },
+    });
+
+    return htmlDocument(
+      currentDocument.title,
+      renderPublicationLayoutHtml(model),
+      assetPrefix
+    );
+  };
+
+  zip.file("index.html", renderPage(firstDoc.slug));
 
   rendered.docs.forEach((doc) => {
-    zip.file(
-      `docs/${doc.slug}.html`,
-      layout(
-        doc.title,
-        `<main class="nd-page"><nav class="nd-nav"><a href="../${doc.overviewHref}">← Back to collection</a></nav><article class="markdown-body">${doc.html}</article><div class="nd-nav-grid">${
-          doc.previous
-            ? `<a href="${doc.previous.slug}.html">← ${doc.previous.title}</a>`
-            : "<span></span>"
-        }${doc.next ? `<a href="${doc.next.slug}.html">${doc.next.title} →</a>` : "<span></span>"}</div></main>`,
-        "../"
-      )
-    );
+    zip.file(`docs/${doc.slug}.html`, renderPage(doc.slug, "../"));
   });
 
   zip.file("assets/site.css", DOCUMENT_SITE_CSS);

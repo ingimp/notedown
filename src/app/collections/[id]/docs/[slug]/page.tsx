@@ -39,7 +39,12 @@ export default async function DocumentEditorPage({
             <Link className="rounded border bg-white px-3 py-2 text-sm" href={`/collections/${id}`}>
               Collection
             </Link>
-            <Link className="rounded border bg-white px-3 py-2 text-sm" href={`/preview/${id}/docs/${slug}`}>
+            <Link
+              className="rounded border bg-white px-3 py-2 text-sm"
+              href={`/preview/${id}/docs/${slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Public doc preview
             </Link>
           </div>

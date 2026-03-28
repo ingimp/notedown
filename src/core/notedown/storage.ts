@@ -92,7 +92,7 @@ export const addDocument = async (
   return meta;
 };
 
-export const updateDocument = async (id: string, slug: string, markdown: string) => {
+export const updateDocument = async (id: string, slug: string, markdown: string): Promise<{ updatedAt: string }> => {
   const collection = await getCollection(id);
   if (!collection) throw new Error(`Collection not found: ${id}`);
 

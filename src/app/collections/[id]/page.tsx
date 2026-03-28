@@ -38,7 +38,12 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
             <p className="mt-2 text-sm text-slate-600">{collection.manifest.description || "No description"}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className="rounded border bg-white px-3 py-2" href={`/preview/${id}`}>
+            <Link
+              className="rounded border bg-white px-3 py-2"
+              href={`/preview/${id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Public preview
             </Link>
             <a className="rounded bg-slate-900 px-3 py-2 text-white" href={`/collections/${id}/export`}>
@@ -61,7 +66,14 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
           {orderedDocs.map((doc, index) => (
             <li key={doc.slug} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
               <div>
-                <p className="font-medium">{doc.title}</p>
+                <p className="font-medium">
+                  {doc.title}{" "}
+                  {index === 0 ? (
+                    <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                      First document
+                    </span>
+                  ) : null}
+                </p>
                 <p className="text-xs text-slate-500">/{doc.slug}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -87,7 +99,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
                     ↓
                   </button>
                 </form>
-                <Link className="rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white" href={`/collections/${id}/docs/${doc.slug}`}>
+                <Link className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white" href={`/collections/${id}/docs/${doc.slug}`}>
                   Open editor
                 </Link>
               </div>
