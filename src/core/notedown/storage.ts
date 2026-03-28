@@ -102,4 +102,29 @@ export const updateDocument = async (id: string, slug: string, markdown: string)
   collection.manifest.updatedAt = new Date().toISOString();
   await fs.writeFile(docPath(id, doc.fileName), markdown, "utf8");
   await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
+
+  return { updatedAt: collection.manifest.updatedAt };
+};
+
+export const reorderDocument = async (id: string, slug: string, direction: "up" | "down") => {
+  const collection = await getCollection(id);
+  if (!collection) throw new Error(`Collection not found: ${id}`);
+
+  const ordered = [...collection.manifest.docs].sort((a, b) => a.order - b.order);
+  const currentIndex = ordered.findIndex((item) => item.slug === slug);
+  if (currentIndex === -1) throw new Error(`Document not found: ${slug}`);
+
+  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= ordered.length) {
+    return;
+  }
+
+  const current = ordered[currentIndex];
+  const target = ordered[targetIndex];
+  const currentOrder = current.order;
+  current.order = target.order;
+  target.order = currentOrder;
+
+  collection.manifest.updatedAt = new Date().toISOString();
+  await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
 };

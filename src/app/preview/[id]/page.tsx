@@ -16,7 +16,7 @@ export default async function CollectionPreviewHome({ params }: { params: Promis
       <style>{DOCUMENT_SITE_CSS}</style>
       <main className="nd-page">
         <nav className="nd-nav">
-          <Link href={`/collections/${id}`}>← Back to workspace</Link>
+          <Link href={`/collections/${id}`}>← Back to collection</Link>
         </nav>
         <h1>{rendered.collection.title}</h1>
         <p>{rendered.collection.description}</p>
