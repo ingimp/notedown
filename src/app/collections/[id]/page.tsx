@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { addDocument, getCollection, reorderDocument } from "@/core/notedown/storage";
 
 export default async function CollectionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -29,7 +30,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
+    <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8" aria-live="polite">
       <header className="rounded-xl bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -80,26 +81,24 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
                 <form action={handleReorder}>
                   <input type="hidden" name="slug" value={doc.slug} />
                   <input type="hidden" name="direction" value="up" />
-                  <button
-                    type="submit"
+                  <PendingSubmitButton
+                    idleLabel="↑"
+                    pendingLabel="…"
                     disabled={index === 0}
-                    className="rounded border px-2 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ↑
-                  </button>
+                    className="rounded border px-2 py-1 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  />
                 </form>
                 <form action={handleReorder}>
                   <input type="hidden" name="slug" value={doc.slug} />
                   <input type="hidden" name="direction" value="down" />
-                  <button
-                    type="submit"
+                  <PendingSubmitButton
+                    idleLabel="↓"
+                    pendingLabel="…"
                     disabled={index === orderedDocs.length - 1}
-                    className="rounded border px-2 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ↓
-                  </button>
+                    className="rounded border px-2 py-1 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  />
                 </form>
-                <Link className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white" href={`/collections/${id}/docs/${doc.slug}`}>
+                <Link className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 active:scale-[0.99]" href={`/collections/${id}/docs/${doc.slug}`}>
                   Open editor
                 </Link>
               </div>
@@ -110,9 +109,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
 
         <form action={handleAddDoc} className="mt-5 grid gap-3 border-t pt-4 md:grid-cols-[1fr_auto]">
           <input className="rounded border p-2" name="title" placeholder="New document title" required />
-          <button className="rounded bg-slate-900 px-4 py-2 text-white" type="submit">
-            Add document
-          </button>
+          <PendingSubmitButton
+            idleLabel="Add document"
+            pendingLabel="Adding..."
+            className="rounded bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          />
         </form>
       </section>
     </main>

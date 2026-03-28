@@ -28,11 +28,11 @@ export default async function DocumentEditorPage({
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
-      <header className="rounded-xl bg-white p-4 shadow-sm">
+      <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Document editor</p>
-            <h1 className="text-2xl font-bold">{selectedDoc.meta.title}</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Editor</p>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">{selectedDoc.meta.title}</h1>
             <p className="text-sm text-slate-600">{collection.manifest.title}</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -40,12 +40,12 @@ export default async function DocumentEditorPage({
               Collection
             </Link>
             <Link
-              className="rounded border bg-white px-3 py-2 text-sm"
+              className="rounded-lg border bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 active:scale-[0.99]"
               href={`/preview/${id}/docs/${slug}`}
               target="_blank"
               rel="noopener noreferrer"
             >
-              Public doc preview
+              Public preview
             </Link>
           </div>
         </div>
@@ -58,16 +58,16 @@ export default async function DocumentEditorPage({
         onSave={handleManualSave}
       />
 
-      <footer className="flex justify-between rounded-xl bg-white p-4 text-sm shadow-sm">
+      <footer className="flex justify-between rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
         {previousDoc ? (
-          <Link className="text-blue-700" href={`/collections/${id}/docs/${previousDoc.slug}`}>
+          <Link className="text-blue-700 transition hover:text-blue-900" href={`/collections/${id}/docs/${previousDoc.slug}`}>
             ← {previousDoc.title}
           </Link>
         ) : (
           <span className="text-slate-400">Start of publication</span>
         )}
         {nextDoc ? (
-          <Link className="text-blue-700" href={`/collections/${id}/docs/${nextDoc.slug}`}>
+          <Link className="text-blue-700 transition hover:text-blue-900" href={`/collections/${id}/docs/${nextDoc.slug}`}>
             {nextDoc.title} →
           </Link>
         ) : (
