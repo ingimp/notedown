@@ -4,6 +4,20 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { SearchResult } from "@/app/api/search/route";
 
+
+function renderSnippet(snippet: string, query: string) {
+  if (!query) return { before: snippet, term: "", after: "" };
+  const lowerSnippet = snippet.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const index = lowerSnippet.indexOf(lowerQuery);
+  if (index === -1) return { before: snippet, term: "", after: "" };
+  return {
+    before: snippet.slice(0, index),
+    term: snippet.slice(index, index + query.length),
+    after: snippet.slice(index + query.length),
+  };
+}
+
 export function SearchModal() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -132,6 +146,7 @@ export function SearchModal() {
 
                 {/* Match snippets */}
                 {result.matches.map((match, mi) => {
+                  const snippetParts = renderSnippet(match.snippet, query.trim());
                   const globalIdx = items.findIndex(
                     (it) => it.result.docSlug === result.docSlug &&
                              it.result.collectionId === result.collectionId &&
@@ -150,11 +165,14 @@ export function SearchModal() {
                     >
                       <span className="font-mono text-gh-xs text-gh-fg-subtle mt-0.5 flex-shrink-0">¶</span>
                       <span className="text-gh-fg-muted leading-relaxed">
-                        {match.before}
-                        <mark className="bg-yellow-200 text-gh-fg font-semibold rounded px-0.5">
-                          {match.term}
-                        </mark>
-                        {match.after}
+                        <span className="block text-gh-xs text-gh-fg-subtle mb-0.5">{match.path.join(" › ")} · {match.blockType}</span>
+                        {snippetParts.before}
+                        {snippetParts.term && (
+                          <mark className="bg-yellow-200 text-gh-fg font-semibold rounded px-0.5">
+                            {snippetParts.term}
+                          </mark>
+                        )}
+                        {snippetParts.after}
                       </span>
                     </button>
                   );
