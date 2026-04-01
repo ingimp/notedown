@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createBlockId, parseMarkdownToBlocks } from "@/core/notedown/searchBlocks";
+import { createBlockId, parseMarkdownToBlocks } from "@/core/notedown/searchBlocksShared";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
 

@@ -1,10 +1,11 @@
 import { getCollection, listCollections } from "./storage";
+import { createBlockId, normalizeSearchText, parseMarkdownToBlocks } from "./searchBlocksShared";
 
 export type IndexedBlock = {
   id: string;
   collectionId: string;
   docSlug: string;
-  type: "title" | "heading" | "paragraph";
+  type: import("./searchBlocksShared").BlockType;
   text: string;
   raw: string;
   path: string[];
@@ -43,18 +44,6 @@ export type BlockSearchResult = {
 let cachedIndexPromise: Promise<BlockSearchIndex> | null = null;
 let cachedDocMeta: Map<string, BlockDocMeta> = new Map();
 
-const WEIGHTS: Record<IndexedBlock["type"], number> = {
-  title: 10,
-  heading: 6,
-  paragraph: 3,
-};
-
-const normalizeText = (input: string) =>
-  input
-    .toLowerCase()
-    .replace(/[`*_~>#\-\[\]()!]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 
 const countOccurrences = (haystack: string, needle: string) => {
   if (!needle) return 0;
@@ -69,9 +58,6 @@ const countOccurrences = (haystack: string, needle: string) => {
   return count;
 };
 
-export const createBlockId = (meta: Pick<IndexedBlock, "collectionId" | "docSlug" | "type">, index: number) =>
-  `${meta.collectionId}:${meta.docSlug}:${meta.type}:${index}`;
-
 const buildSnippet = (text: string, query: string, maxLength = 140) => {
   if (!text) return "";
   const matchIndex = text.indexOf(query);
@@ -84,88 +70,6 @@ const buildSnippet = (text: string, query: string, maxLength = 140) => {
   const suffix = end < text.length ? "…" : "";
   return `${prefix}${text.slice(start, end)}${suffix}`;
 };
-
-export function parseMarkdownToBlocks(markdown: string, docTitle: string): Pick<IndexedBlock, "type" | "text" | "raw" | "path" | "weight">[] {
-  const lines = markdown.split(/\r?\n/);
-  const blocks: Pick<IndexedBlock, "type" | "text" | "raw" | "path" | "weight">[] = [];
-  const pathStack: string[] = [docTitle];
-
-  let titleSeen = false;
-  let paragraphBuffer: string[] = [];
-
-  const flushParagraph = () => {
-    if (paragraphBuffer.length === 0) return;
-    const raw = paragraphBuffer.join("\n").trim();
-    const text = normalizeText(raw);
-    if (text) {
-      blocks.push({
-        type: "paragraph",
-        text,
-        raw,
-        path: [...pathStack],
-        weight: WEIGHTS.paragraph,
-      });
-    }
-    paragraphBuffer = [];
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    const titleMatch = !titleSeen ? trimmed.match(/^#\s+(.+)/) : null;
-    if (titleMatch) {
-      flushParagraph();
-      const raw = titleMatch[1].trim();
-      const text = normalizeText(raw);
-      if (text) {
-        pathStack[0] = raw;
-        blocks.push({
-          type: "title",
-          text,
-          raw,
-          path: [...pathStack],
-          weight: WEIGHTS.title,
-        });
-      }
-      titleSeen = true;
-      continue;
-    }
-
-    const headingMatch = trimmed.match(/^(##|###)\s+(.+)/);
-    if (headingMatch) {
-      flushParagraph();
-      const level = headingMatch[1].length;
-      const raw = headingMatch[2].trim();
-      const text = normalizeText(raw);
-      if (text) {
-        if (level === 2) {
-          pathStack.splice(1, pathStack.length - 1, raw);
-        } else {
-          pathStack.splice(2, pathStack.length - 2, raw);
-        }
-        blocks.push({
-          type: "heading",
-          text,
-          raw,
-          path: [...pathStack],
-          weight: WEIGHTS.heading,
-        });
-      }
-      continue;
-    }
-
-    if (!trimmed) {
-      flushParagraph();
-      continue;
-    }
-
-    paragraphBuffer.push(trimmed);
-  }
-
-  flushParagraph();
-
-  return blocks;
-}
 
 const buildBlockSearchIndex = async (): Promise<BlockSearchIndex> => {
   const manifests = await listCollections();
@@ -210,7 +114,7 @@ export const searchBlocks = async (
   query: string,
   options?: { docSlug?: string; collectionId?: string }
 ): Promise<BlockSearchResult[]> => {
-  const normalizedQuery = normalizeText(query);
+  const normalizedQuery = normalizeSearchText(query);
   if (normalizedQuery.length < 2) return [];
 
   const index = await getBlockSearchIndex();
