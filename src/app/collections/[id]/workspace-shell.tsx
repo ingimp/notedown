@@ -198,9 +198,14 @@ export function WorkspaceShell({
     const ta = textareaRef.current;
     if (ta) {
       const textNeedle = target.raw.trim();
-      const index = textNeedle ? content.indexOf(textNeedle) : -1;
-      if (index >= 0) {
-        const before = content.slice(0, index);
+      const start = textNeedle ? content.indexOf(textNeedle) : -1;
+      if (start >= 0) {
+        const end = start + textNeedle.length;
+        // One-shot selection for global-search navigation only: we do not keep editor search state.
+        ta.focus({ preventScroll: true });
+        ta.setSelectionRange(start, end);
+
+        const before = content.slice(0, start);
         const lines = before.split("\n").length - 1;
         const totalLines = content.split("\n").length;
         const ratio = lines / Math.max(totalLines - 1, 1);
