@@ -9,10 +9,10 @@ export default async function CollectionWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ doc?: string; hl?: string }>;
+  searchParams: Promise<{ doc?: string; target?: string }>;
 }) {
   const { id } = await params;
-  const { doc, hl } = await searchParams;
+  const { doc, target } = await searchParams;
   const collection = await getCollection(id);
   if (!collection) notFound();
 
@@ -69,7 +69,7 @@ export default async function CollectionWorkspacePage({
           docs={sortedDocs}
           activeSlug={selected.slug}
           initialMarkdown={selectedDoc.markdown}
-          highlight={hl}
+          navigationTargetBlockId={target}
         />
       ) : (
         /* No docs yet — show empty state inside shell layout */

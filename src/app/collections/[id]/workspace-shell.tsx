@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createBlockId, parseMarkdownToBlocks } from "@/core/notedown/searchBlocksShared";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
 
@@ -19,7 +20,7 @@ interface Props {
   docs: DocItem[];
   activeSlug: string;
   initialMarkdown: string;
-  highlight?: string;
+  navigationTargetBlockId?: string;
 }
 
 function extractH1(md: string): string | null {
@@ -27,34 +28,9 @@ function extractH1(md: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-// ── Search utilities (completely independent from editor state) ──────────────
-
-function findAllMatches(text: string, term: string): Array<{ index: number; length: number }> {
-  if (!term || term.length < 2) return [];
-  const results: Array<{ index: number; length: number }> = [];
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(escaped, "gi");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    results.push({ index: m.index, length: m[0].length });
-  }
-  return results;
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
-
-function applyHighlight(html: string, term: string): string {
-  if (!term || term.length < 2) return html;
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return html.replace(
-    new RegExp(`(${escaped})`, "gi"),
-    '<mark data-hl class="bg-yellow-200 text-gray-900 rounded px-0.5">$1</mark>'
-  );
-}
-
-function stripHighlight(html: string): string {
-  return html.replace(/<mark data-hl[^>]*>(.*?)<\/mark>/gi, "$1");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function WorkspaceShell({
   collectionId,
@@ -62,11 +38,10 @@ export function WorkspaceShell({
   docs: initialDocs,
   activeSlug,
   initialMarkdown,
-  highlight,
+  navigationTargetBlockId,
 }: Props) {
   const router = useRouter();
 
-  // ── Sidebar ──────────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [docs, setDocs] = useState<DocItem[]>(initialDocs);
   const [addTitle, setAddTitle] = useState("");
@@ -74,149 +49,199 @@ export function WorkspaceShell({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
 
-  // ── Editor ───────────────────────────────────────────────────────────────
   const [content, setContent] = useState(initialMarkdown);
-  const [rawHtml, setRawHtml] = useState(""); // HTML without any highlight marks
+  const [rawHtml, setRawHtml] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showPreview, setShowPreview] = useState(true);
+  const [targetBlockId, setTargetBlockId] = useState(navigationTargetBlockId ?? "");
 
-  // ── Search (isolated from editor) ────────────────────────────────────────
-  const [hlTerm, setHlTerm] = useState(highlight ?? "");
-  const [matches, setMatches] = useState<Array<{ index: number; length: number }>>([]);
-  const [matchIndex, setMatchIndex] = useState(0);
-
-  // ── Refs ─────────────────────────────────────────────────────────────────
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
+  const highlightedNodeRef = useRef<HTMLElement | null>(null);
+  const targetClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const renderRequestIdRef = useRef(0);
+  const currentDocRef = useRef(activeSlug);
   const lastSavedTitleRef = useRef(initialDocs.find(d => d.slug === activeSlug)?.title ?? "");
 
-  // ── Derived: preview HTML = rawHtml with current highlight applied ────────
-  const previewHtml = hlTerm && rawHtml ? applyHighlight(rawHtml, hlTerm) : rawHtml;
+  const clearPreviewHighlight = useCallback(() => {
+    if (targetClearTimerRef.current) {
+      clearTimeout(targetClearTimerRef.current);
+      targetClearTimerRef.current = null;
+    }
+    if (highlightedNodeRef.current) {
+      highlightedNodeRef.current.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
+      highlightedNodeRef.current = null;
+    }
+  }, []);
 
-  // ── Render markdown → rawHtml ─────────────────────────────────────────────
-  const renderContent = useCallback(async (md: string) => {
+  const renderContent = useCallback(async (md: string, slug: string) => {
+    renderRequestIdRef.current += 1;
+    const requestId = renderRequestIdRef.current;
     if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markdown: md }),
-        signal: abortRef.current.signal,
+        signal: controller.signal,
       });
       const data = await res.json();
-      setRawHtml(data.html ?? "");
+      if (requestId === renderRequestIdRef.current && slug === currentDocRef.current) {
+        setRawHtml(data.html ?? "");
+      }
     } catch (e: unknown) {
-      if ((e as Error)?.name !== "AbortError") setRawHtml("");
+      if ((e as Error)?.name !== "AbortError" && requestId === renderRequestIdRef.current && slug === currentDocRef.current) {
+        setRawHtml("");
+      }
     }
-  }, []); // no deps — never recreated
-
-  // ── Initial render ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (initialMarkdown.trim()) renderContent(initialMarkdown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Save ──────────────────────────────────────────────────────────────────
-  const saveContent = useCallback(async (md: string, title: string) => {
+  useEffect(() => {
+    setDocs(initialDocs);
+  }, [initialDocs]);
+
+  useEffect(() => {
+    // Document switches must reset local editor/render/save state to avoid stale buffers leaking across docs.
+    currentDocRef.current = activeSlug;
+    setContent(initialMarkdown);
+    setRawHtml("");
+    setSaveState("saved");
+    setTargetBlockId(navigationTargetBlockId ?? "");
+
+    if (renderTimer.current) {
+      clearTimeout(renderTimer.current);
+      renderTimer.current = null;
+    }
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (abortRef.current) abortRef.current.abort();
+    clearPreviewHighlight();
+
+    lastSavedTitleRef.current = initialDocs.find(d => d.slug === activeSlug)?.title ?? extractH1(initialMarkdown) ?? "Senza titolo";
+    if (activeSlug) renderContent(initialMarkdown, activeSlug);
+  }, [activeSlug, initialMarkdown, initialDocs, navigationTargetBlockId, renderContent, clearPreviewHighlight]);
+
+  useEffect(() => {
+    return () => {
+      if (renderTimer.current) clearTimeout(renderTimer.current);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (abortRef.current) abortRef.current.abort();
+      clearPreviewHighlight();
+    };
+  }, [clearPreviewHighlight]);
+
+  const saveContent = useCallback(async (slug: string, md: string, title: string) => {
+    if (!slug || slug !== currentDocRef.current) return;
     setSaveState("saving");
     const titleChanged = title !== lastSavedTitleRef.current;
     try {
-      const res = await fetch(`/api/collections/${collectionId}/docs/${activeSlug}`, {
+      const res = await fetch(`/api/collections/${collectionId}/docs/${slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markdown: md, ...(titleChanged ? { title } : {}) }),
       });
+      if (slug !== currentDocRef.current) return;
       setSaveState(res.ok ? "saved" : "error");
       if (res.ok && titleChanged) lastSavedTitleRef.current = title;
     } catch {
-      setSaveState("error");
+      if (slug === currentDocRef.current) setSaveState("error");
     }
-  }, [collectionId, activeSlug]); // only real deps
+  }, [collectionId]);
 
-  // ── Editor content change ─────────────────────────────────────────────────
   const handleContentChange = useCallback((value: string) => {
     setContent(value);
     setSaveState("unsaved");
 
-    // Debounce render
     if (renderTimer.current) clearTimeout(renderTimer.current);
-    renderTimer.current = setTimeout(() => renderContent(value), 300);
+    const docSlug = activeSlug;
+    renderTimer.current = setTimeout(() => renderContent(value, docSlug), 300);
 
-    // Update sidebar title instantly
     const title = extractH1(value) || "Senza titolo";
     setDocs(prev => prev.map(d => d.slug === activeSlug ? { ...d, title } : d));
 
-    // Debounce save — only triggered by typing in the TEXTAREA
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveContent(value, title), 1500);
+    saveTimer.current = setTimeout(() => saveContent(docSlug, value, title), 1500);
   }, [renderContent, saveContent, activeSlug]);
 
-  // ── Cmd+S ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveContent(content, extractH1(content) || "Senza titolo");
+        saveContent(activeSlug, content, extractH1(content) || "Senza titolo");
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [content, saveContent]);
+  }, [activeSlug, content, saveContent]);
 
-  // ── Search: recompute matches when term or content changes ────────────────
   useEffect(() => {
-    const m = findAllMatches(content, hlTerm);
-    setMatches(m);
-    setMatchIndex(0);
-  }, [hlTerm, content]);
+    if (!targetBlockId || !activeSlug) return;
+    if (!rawHtml.trim()) return;
 
-  // ── Search: navigate to current match ────────────────────────────────────
-  useEffect(() => {
-    if (matches.length === 0 || !hlTerm) return;
-    const match = matches[matchIndex];
-    if (!match) return;
+    const docTitle = extractH1(content) || docs.find((d) => d.slug === activeSlug)?.title || "Senza titolo";
+    const parsed = parseMarkdownToBlocks(content, docTitle);
+    const target = parsed.find((block, index) => {
+      const id = createBlockId({ collectionId, docSlug: activeSlug, type: block.type }, index);
+      return id === targetBlockId;
+    });
 
-    // --- Editor selection ---
+    if (!target) return setTargetBlockId("");
+
     const ta = textareaRef.current;
     if (ta) {
-      // Verify the text at that position actually matches before selecting
-      const slice = ta.value.substring(match.index, match.index + match.length);
-      if (slice.toLowerCase() === hlTerm.toLowerCase().substring(0, match.length)) {
+      const textNeedle = target.raw.trim();
+      const start = textNeedle ? content.indexOf(textNeedle) : -1;
+      if (start >= 0) {
+        const end = start + textNeedle.length;
+        // One-shot selection for global-search navigation only: we do not keep editor search state.
         ta.focus({ preventScroll: true });
-        requestAnimationFrame(() => {
-          ta.setSelectionRange(match.index, match.index + match.length);
-          // Scroll textarea: use a hidden mirror div for precise line measurement
-          const before = ta.value.substring(0, match.index);
-          const lines = before.split("\n").length - 1;
-          const totalLines = ta.value.split("\n").length;
-          const ratio = lines / Math.max(totalLines - 1, 1);
-          ta.scrollTop = Math.max(0, ratio * ta.scrollHeight - ta.clientHeight / 2);
-        });
+        ta.setSelectionRange(start, end);
+
+        const before = content.slice(0, start);
+        const lines = before.split("\n").length - 1;
+        const totalLines = content.split("\n").length;
+        const ratio = lines / Math.max(totalLines - 1, 1);
+        ta.scrollTop = Math.max(0, ratio * ta.scrollHeight - ta.clientHeight / 2);
       }
     }
 
-    // --- Preview scroll ---
     const container = previewScrollRef.current;
-    if (container) {
-      requestAnimationFrame(() => {
-        const marks = container.querySelectorAll<HTMLElement>("mark[data-hl]");
-        const mark = marks[matchIndex];
-        if (!mark) return;
-        const containerTop = container.getBoundingClientRect().top;
-        const markTop = mark.getBoundingClientRect().top;
-        container.scrollTop += markTop - containerTop - container.clientHeight / 2;
-        mark.classList.add("ring-2", "ring-yellow-400");
-        setTimeout(() => mark.classList.remove("ring-2", "ring-yellow-400"), 800);
-      });
-    }
-  }, [matchIndex, matches, hlTerm]);
+    if (!container) return;
 
-  // ── Delete doc ────────────────────────────────────────────────────────────
+    const blockText = normalizeForMatch(target.raw);
+    if (!blockText) return setTargetBlockId("");
+
+    const candidates = Array.from(
+      container.querySelectorAll<HTMLElement>(".prose h1, .prose h2, .prose h3, .prose p, .prose li, .prose blockquote, .prose pre")
+    );
+    const match = candidates.find((node) => normalizeForMatch(node.textContent ?? "").includes(blockText));
+
+    if (!match) return setTargetBlockId("");
+
+    clearPreviewHighlight();
+
+    highlightedNodeRef.current = match;
+    match.classList.add("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
+    match.scrollIntoView({ block: "center", behavior: "smooth" });
+
+    if (targetClearTimerRef.current) clearTimeout(targetClearTimerRef.current);
+    targetClearTimerRef.current = setTimeout(() => {
+      match.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
+      if (highlightedNodeRef.current === match) highlightedNodeRef.current = null;
+      targetClearTimerRef.current = null;
+    }, 2200);
+
+    setTargetBlockId("");
+  }, [targetBlockId, activeSlug, content, collectionId, docs, rawHtml, clearPreviewHighlight]);
+
   async function handleDeleteDoc(slug: string) {
     setDeletingSlug(slug);
     await fetch(`/api/collections/${collectionId}/docs/${slug}`, { method: "DELETE" });
@@ -231,7 +256,6 @@ export function WorkspaceShell({
     }
   }
 
-  // ── Add doc ───────────────────────────────────────────────────────────────
   async function handleAddDoc(e: React.FormEvent) {
     e.preventDefault();
     const title = addTitle.trim();
@@ -255,8 +279,6 @@ export function WorkspaceShell({
 
   return (
     <div className="flex-1 flex overflow-hidden relative">
-
-      {/* ── Sidebar toggle ── */}
       <button
         onClick={() => setSidebarOpen(v => !v)}
         className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-5 h-10 bg-gh-canvas border border-gh-border rounded-r-gh text-gh-fg-muted hover:text-gh-fg hover:bg-gh-canvas-subtle transition-all shadow-gh-sm"
@@ -271,7 +293,6 @@ export function WorkspaceShell({
         </svg>
       </button>
 
-      {/* ── Sidebar ── */}
       <aside
         className="flex-shrink-0 bg-gh-canvas border-r border-gh-border transition-all duration-200 flex flex-col"
         style={{ width: sidebarOpen ? "208px" : "0px", overflow: "hidden" }}
@@ -351,7 +372,6 @@ export function WorkspaceShell({
         </div>
       </aside>
 
-      {/* ── Editor area ── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {!activeSlug ? (
           <div className="flex-1 flex items-center justify-center text-gh-fg-muted text-gh-sm">
@@ -359,7 +379,6 @@ export function WorkspaceShell({
           </div>
         ) : (
           <>
-            {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 bg-gh-canvas-subtle border-b border-gh-border flex-shrink-0 gap-2">
               <div className="flex items-center gap-3 min-w-0">
                 <span className="font-mono text-gh-xs font-semibold text-gh-fg-muted uppercase tracking-wider hidden sm:inline truncate max-w-[180px]">
@@ -371,51 +390,6 @@ export function WorkspaceShell({
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Search bar — completely isolated, never touches content/save */}
-                <div className="flex items-center gap-1 bg-gh-canvas border border-gh-border rounded-gh px-2 py-1">
-                  <svg className="w-3 h-3 text-gh-fg-muted flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>
-                  </svg>
-                  <input
-                    value={hlTerm}
-                    onChange={e => setHlTerm(e.target.value)}
-                    placeholder="Cerca nel doc…"
-                    className="w-28 lg:w-36 bg-transparent outline-none text-gh-xs text-gh-fg placeholder:text-gh-fg-subtle"
-                  />
-                  {hlTerm && (
-                    <span className={`font-mono text-gh-xs whitespace-nowrap ${matches.length === 0 ? "text-red-400" : "text-gh-fg-muted"}`}>
-                      {matches.length === 0 ? "0" : `${matchIndex + 1}/${matches.length}`}
-                    </span>
-                  )}
-                  {hlTerm && (
-                    <>
-                      <button
-                        onClick={() => setMatchIndex(i => (i - 1 + matches.length) % matches.length)}
-                        disabled={matches.length <= 1}
-                        className="text-gh-fg-muted hover:text-gh-fg disabled:opacity-30 px-0.5"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M3.22 9.78a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1-1.06 1.06L8 6.06 4.28 9.78a.75.75 0 0 1-1.06 0Z"/>
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setMatchIndex(i => (i + 1) % matches.length)}
-                        disabled={matches.length <= 1}
-                        className="text-gh-fg-muted hover:text-gh-fg disabled:opacity-30 px-0.5"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M12.78 6.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L3.22 7.28a.75.75 0 0 1 1.06-1.06L8 9.94l3.72-3.72a.75.75 0 0 1 1.06 0Z"/>
-                        </svg>
-                      </button>
-                      <button onClick={() => setHlTerm("")} className="text-gh-fg-muted hover:text-gh-fg px-0.5">
-                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
-                        </svg>
-                      </button>
-                    </>
-                  )}
-                </div>
-
                 <SaveIndicator state={saveState} />
 
                 <button
@@ -435,10 +409,7 @@ export function WorkspaceShell({
               </div>
             </div>
 
-            {/* Panes */}
             <div className={`flex-1 overflow-hidden grid ${showPreview ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
-
-              {/* Editor */}
               <div className={`flex flex-col overflow-hidden ${showPreview ? "border-b md:border-b-0 md:border-r border-gh-border" : ""}`}>
                 <textarea
                   ref={textareaRef}
@@ -456,12 +427,11 @@ export function WorkspaceShell({
                 />
               </div>
 
-              {/* Preview */}
               {showPreview && (
                 <div className="flex flex-col overflow-hidden bg-gh-canvas">
                   <div ref={previewScrollRef} className="flex-1 overflow-auto p-6">
-                    {previewHtml ? (
-                      <div className="prose" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                    {rawHtml ? (
+                      <div className="prose" dangerouslySetInnerHTML={{ __html: rawHtml }} />
                     ) : (
                       <div className="h-full flex items-center justify-center text-gh-fg-subtle text-gh-sm">
                         Inizia a scrivere per vedere l'anteprima
