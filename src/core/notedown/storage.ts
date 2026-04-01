@@ -103,3 +103,31 @@ export const updateDocument = async (id: string, slug: string, markdown: string)
   await fs.writeFile(docPath(id, doc.fileName), markdown, "utf8");
   await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
 };
+
+export const deleteDocument = async (id: string, slug: string) => {
+  const collection = await getCollection(id);
+  if (!collection) throw new Error(`Collection not found: ${id}`);
+  const doc = collection.manifest.docs.find((item) => item.slug === slug);
+  if (!doc) throw new Error(`Document not found: ${slug}`);
+  // Remove file
+  await fs.unlink(docPath(id, doc.fileName));
+  // Remove from manifest
+  collection.manifest.docs = collection.manifest.docs.filter((d) => d.slug !== slug);
+  collection.manifest.updatedAt = new Date().toISOString();
+  await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
+};
+
+export const deleteCollection = async (id: string) => {
+  const dir = collectionDir(id);
+  await fs.rm(dir, { recursive: true, force: true });
+};
+
+export const updateDocumentTitle = async (id: string, slug: string, title: string) => {
+  const collection = await getCollection(id);
+  if (!collection) throw new Error(`Collection not found: ${id}`);
+  const doc = collection.manifest.docs.find((item) => item.slug === slug);
+  if (!doc) throw new Error(`Document not found: ${slug}`);
+  doc.title = title;
+  collection.manifest.updatedAt = new Date().toISOString();
+  await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
+};

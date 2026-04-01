@@ -1,99 +1,86 @@
+import { notFound } from "next/navigation";
+import { getCollection } from "@/core/notedown/storage";
+import { WorkspaceShell } from "./workspace-shell";
+import { SearchTrigger } from "@/components/search-trigger";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { addDocument, getCollection, updateDocument } from "@/core/notedown/storage";
-import { WorkspaceClient } from "./workspace-client";
 
 export default async function CollectionWorkspacePage({
   params,
-  searchParams
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ doc?: string }>;
+  searchParams: Promise<{ doc?: string; hl?: string }>;
 }) {
   const { id } = await params;
-  const { doc } = await searchParams;
+  const { doc, hl } = await searchParams;
   const collection = await getCollection(id);
   if (!collection) notFound();
 
-  const selected = collection.docs.find((item) => item.meta.slug === doc) ?? collection.docs[0] ?? null;
-
-  async function handleAddDoc(formData: FormData) {
-    "use server";
-    const title = String(formData.get("title") ?? "").trim();
-    if (!title) return;
-    const created = await addDocument(id, { title, initialMarkdown: `# ${title}\n\nWrite your content here.` });
-    redirect(`/collections/${id}?doc=${created.slug}`);
-  }
-
-  async function handleSaveDoc(formData: FormData) {
-    "use server";
-    const slug = String(formData.get("slug") ?? "");
-    const markdown = String(formData.get("markdown") ?? "");
-    if (!slug) return;
-    await updateDocument(id, slug, markdown);
-    redirect(`/collections/${id}?doc=${slug}`);
-  }
+  const sortedDocs = [...collection.manifest.docs].sort((a, b) => a.order - b.order);
+  const selected = sortedDocs.find((d) => d.slug === doc) ?? sortedDocs[0] ?? null;
+  const selectedDoc = selected
+    ? collection.docs.find((d) => d.meta.slug === selected.slug)
+    : null;
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
-      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Workspace</p>
-          <h1 className="text-2xl font-bold">{collection.manifest.title}</h1>
-          <p className="text-sm text-slate-600">{collection.manifest.description}</p>
+    <div className="h-screen flex flex-col bg-gh-canvas-subtle overflow-hidden">
+      {/* Top nav */}
+      <header className="bg-gh-header border-b border-black/20 h-12 flex items-center justify-between px-4 flex-shrink-0 z-10">
+        <div className="flex items-center gap-1 min-w-0 font-mono text-gh-xs">
+          <Link href="/" className="text-gh-header-muted hover:text-gh-header-text transition-colors flex-shrink-0">
+            notedown
+          </Link>
+          <span className="text-gh-header-muted">/</span>
+          <span className="text-gh-header-muted truncate max-w-[160px]">{collection.manifest.title}</span>
+          {selected && (
+            <>
+              <span className="text-gh-header-muted">/</span>
+              <span className="text-gh-header-text truncate max-w-[140px]">{selected.slug}</span>
+            </>
+          )}
         </div>
-        <div className="flex gap-2">
-          <Link className="rounded border bg-white px-3 py-2" href={`/preview/${id}`}>
-            Preview
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <SearchTrigger compact />
+          <Link
+            href={`/preview/${id}${selected ? `/docs/${selected.slug}` : ""}`}
+            className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M1 8a7 7 0 1 1 14 0A7 7 0 0 1 1 8Zm7.75-4.25a.75.75 0 0 0-1.5 0V8c0 .414.336.75.75.75h3.25a.75.75 0 0 0 0-1.5h-2.5v-3.5Z"/>
+            </svg>
+            <span className="hidden sm:inline">Preview</span>
           </Link>
-          <a className="rounded bg-slate-900 px-3 py-2 text-white" href={`/collections/${id}/export`}>
-            Export
+          <a
+            href={`/collections/${id}/export`}
+            className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z"/><path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06l1.97 1.969Z"/>
+            </svg>
+            <span className="hidden sm:inline">Export</span>
           </a>
-          <Link className="rounded border bg-white px-3 py-2" href="/">
-            Dashboard
-          </Link>
         </div>
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-        <aside className="space-y-4 rounded-lg bg-white p-4">
-          <h2 className="font-semibold">Documents</h2>
-          <ul className="space-y-1 text-sm">
-            {collection.manifest.docs.map((item) => (
-              <li key={item.slug}>
-                <Link
-                  href={`/collections/${id}?doc=${item.slug}`}
-                  className={`block rounded px-2 py-1 ${item.slug === selected?.meta.slug ? "bg-slate-200" : "hover:bg-slate-100"}`}
-                >
-                  {item.title}
-                </Link>
-              </li>
-            ))}
-            {collection.manifest.docs.length === 0 && <li className="text-slate-500">No documents yet.</li>}
-          </ul>
-          <form action={handleAddDoc} className="space-y-2 border-t pt-3">
-            <input className="w-full rounded border p-2 text-sm" name="title" placeholder="Add document" required />
-            <button className="rounded bg-slate-900 px-3 py-2 text-sm text-white" type="submit">
-              Add document
-            </button>
-          </form>
-        </aside>
-
-        {selected ? (
-          <section className="space-y-3">
-            <form action={handleSaveDoc} className="space-y-3">
-              <input type="hidden" name="slug" value={selected.meta.slug} />
-              <p className="text-sm font-medium">Editing: {selected.meta.title}</p>
-              <WorkspaceClient key={selected.meta.slug} initialMarkdown={selected.markdown} />
-              <button className="rounded bg-blue-700 px-4 py-2 text-white" type="submit">
-                Save document
-              </button>
-            </form>
-          </section>
-        ) : (
-          <section className="rounded-lg bg-white p-6 text-slate-500">Create your first document to start writing.</section>
-        )}
-      </div>
-    </main>
+      {selected && selectedDoc ? (
+        <WorkspaceShell
+          collectionId={id}
+          collectionTitle={collection.manifest.title}
+          docs={sortedDocs}
+          activeSlug={selected.slug}
+          initialMarkdown={selectedDoc.markdown}
+          highlight={hl}
+        />
+      ) : (
+        /* No docs yet — show empty state inside shell layout */
+        <WorkspaceShell
+          collectionId={id}
+          collectionTitle={collection.manifest.title}
+          docs={sortedDocs}
+          activeSlug=""
+          initialMarkdown=""
+        />
+      )}
+    </div>
   );
 }
