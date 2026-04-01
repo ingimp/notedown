@@ -6,9 +6,8 @@ export async function GET(
 ) {
   const { id } = await params;
   const buffer = await buildStaticSiteZip(id);
-  const bytes = new Uint8Array(buffer);
 
-  return new Response(bytes, {
+  return new Response(buffer, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${id}-site.zip"`

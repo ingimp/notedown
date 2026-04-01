@@ -1,121 +1,86 @@
+import { notFound } from "next/navigation";
+import { getCollection } from "@/core/notedown/storage";
+import { WorkspaceShell } from "./workspace-shell";
+import { SearchTrigger } from "@/components/search-trigger";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { PendingSubmitButton } from "@/components/pending-submit-button";
-import { addDocument, getCollection, reorderDocument } from "@/core/notedown/storage";
 
-export default async function CollectionPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CollectionWorkspacePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ doc?: string; hl?: string }>;
+}) {
   const { id } = await params;
+  const { doc, hl } = await searchParams;
   const collection = await getCollection(id);
   if (!collection) notFound();
 
-  const orderedDocs = [...collection.manifest.docs].sort((a, b) => a.order - b.order);
-
-  async function handleAddDoc(formData: FormData) {
-    "use server";
-    const title = String(formData.get("title") ?? "").trim();
-    if (!title) return;
-
-    await addDocument(id, { title, initialMarkdown: `# ${title}\n\nWrite your content here.` });
-    redirect(`/collections/${id}`);
-  }
-
-  async function handleReorder(formData: FormData) {
-    "use server";
-    const slug = String(formData.get("slug") ?? "");
-    const directionValue = String(formData.get("direction") ?? "");
-    if (!slug || (directionValue !== "up" && directionValue !== "down")) return;
-
-    await reorderDocument(id, slug, directionValue);
-    redirect(`/collections/${id}`);
-  }
+  const sortedDocs = [...collection.manifest.docs].sort((a, b) => a.order - b.order);
+  const selected = sortedDocs.find((d) => d.slug === doc) ?? sortedDocs[0] ?? null;
+  const selectedDoc = selected
+    ? collection.docs.find((d) => d.meta.slug === selected.slug)
+    : null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8" aria-live="polite">
-      <header className="rounded-xl bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Publication</p>
-            <h1 className="text-3xl font-bold">{collection.manifest.title}</h1>
-            <p className="mt-2 text-sm text-slate-600">{collection.manifest.description || "No description"}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              className="rounded border bg-white px-3 py-2"
-              href={`/preview/${id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Public preview
-            </Link>
-            <a className="rounded bg-slate-900 px-3 py-2 text-white" href={`/collections/${id}/export`}>
-              Export static site
-            </a>
-            <Link className="rounded border bg-white px-3 py-2" href="/">
-              Dashboard
-            </Link>
-          </div>
+    <div className="h-screen flex flex-col bg-gh-canvas-subtle overflow-hidden">
+      {/* Top nav */}
+      <header className="bg-gh-header border-b border-black/20 h-12 flex items-center justify-between px-4 flex-shrink-0 z-10">
+        <div className="flex items-center gap-1 min-w-0 font-mono text-gh-xs">
+          <Link href="/" className="text-gh-header-muted hover:text-gh-header-text transition-colors flex-shrink-0">
+            notedown
+          </Link>
+          <span className="text-gh-header-muted">/</span>
+          <span className="text-gh-header-muted truncate max-w-[160px]">{collection.manifest.title}</span>
+          {selected && (
+            <>
+              <span className="text-gh-header-muted">/</span>
+              <span className="text-gh-header-text truncate max-w-[140px]">{selected.slug}</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <SearchTrigger compact />
+          <Link
+            href={`/preview/${id}${selected ? `/docs/${selected.slug}` : ""}`}
+            className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M1 8a7 7 0 1 1 14 0A7 7 0 0 1 1 8Zm7.75-4.25a.75.75 0 0 0-1.5 0V8c0 .414.336.75.75.75h3.25a.75.75 0 0 0 0-1.5h-2.5v-3.5Z"/>
+            </svg>
+            <span className="hidden sm:inline">Preview</span>
+          </Link>
+          <a
+            href={`/collections/${id}/export`}
+            className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z"/><path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06l1.97 1.969Z"/>
+            </svg>
+            <span className="hidden sm:inline">Export</span>
+          </a>
         </div>
       </header>
 
-      <section className="rounded-xl bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold">Documents</h2>
-          <p className="text-sm text-slate-500">Manage structure here, edit in dedicated page.</p>
-        </div>
-
-        <ul className="space-y-2">
-          {orderedDocs.map((doc, index) => (
-            <li key={doc.slug} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-              <div>
-                <p className="font-medium">
-                  {doc.title}{" "}
-                  {index === 0 ? (
-                    <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                      First document
-                    </span>
-                  ) : null}
-                </p>
-                <p className="text-xs text-slate-500">/{doc.slug}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <form action={handleReorder}>
-                  <input type="hidden" name="slug" value={doc.slug} />
-                  <input type="hidden" name="direction" value="up" />
-                  <PendingSubmitButton
-                    idleLabel="↑"
-                    pendingLabel="…"
-                    disabled={index === 0}
-                    className="rounded border px-2 py-1 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  />
-                </form>
-                <form action={handleReorder}>
-                  <input type="hidden" name="slug" value={doc.slug} />
-                  <input type="hidden" name="direction" value="down" />
-                  <PendingSubmitButton
-                    idleLabel="↓"
-                    pendingLabel="…"
-                    disabled={index === orderedDocs.length - 1}
-                    className="rounded border px-2 py-1 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  />
-                </form>
-                <Link className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 active:scale-[0.99]" href={`/collections/${id}/docs/${doc.slug}`}>
-                  Open editor
-                </Link>
-              </div>
-            </li>
-          ))}
-          {orderedDocs.length === 0 && <li className="rounded-lg border border-dashed p-4 text-slate-500">No documents yet.</li>}
-        </ul>
-
-        <form action={handleAddDoc} className="mt-5 grid gap-3 border-t pt-4 md:grid-cols-[1fr_auto]">
-          <input className="rounded border p-2" name="title" placeholder="New document title" required />
-          <PendingSubmitButton
-            idleLabel="Add document"
-            pendingLabel="Adding..."
-            className="rounded bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          />
-        </form>
-      </section>
-    </main>
+      {selected && selectedDoc ? (
+        <WorkspaceShell
+          collectionId={id}
+          collectionTitle={collection.manifest.title}
+          docs={sortedDocs}
+          activeSlug={selected.slug}
+          initialMarkdown={selectedDoc.markdown}
+          highlight={hl}
+        />
+      ) : (
+        /* No docs yet — show empty state inside shell layout */
+        <WorkspaceShell
+          collectionId={id}
+          collectionTitle={collection.manifest.title}
+          docs={sortedDocs}
+          activeSlug=""
+          initialMarkdown=""
+        />
+      )}
+    </div>
   );
 }

@@ -5,11 +5,11 @@ const renderer = createMarkdownRenderer();
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as { markdown?: string };
-    const html = await renderer.render(body.markdown ?? "");
+    const body = (await request.json()) as { markdown?: string; content?: string };
+    const md = body.markdown ?? body.content ?? "";
+    const html = await renderer.render(md);
     return NextResponse.json({ html });
-  } catch (error) {
-    console.warn("Render API failed", error);
-    return NextResponse.json({ html: "" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ html: "" });
   }
 }

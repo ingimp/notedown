@@ -92,7 +92,7 @@ export const addDocument = async (
   return meta;
 };
 
-export const updateDocument = async (id: string, slug: string, markdown: string): Promise<{ updatedAt: string }> => {
+export const updateDocument = async (id: string, slug: string, markdown: string) => {
   const collection = await getCollection(id);
   if (!collection) throw new Error(`Collection not found: ${id}`);
 
@@ -102,29 +102,32 @@ export const updateDocument = async (id: string, slug: string, markdown: string)
   collection.manifest.updatedAt = new Date().toISOString();
   await fs.writeFile(docPath(id, doc.fileName), markdown, "utf8");
   await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
-
-  return { updatedAt: collection.manifest.updatedAt };
 };
 
-export const reorderDocument = async (id: string, slug: string, direction: "up" | "down") => {
+export const deleteDocument = async (id: string, slug: string) => {
   const collection = await getCollection(id);
   if (!collection) throw new Error(`Collection not found: ${id}`);
+  const doc = collection.manifest.docs.find((item) => item.slug === slug);
+  if (!doc) throw new Error(`Document not found: ${slug}`);
+  // Remove file
+  await fs.unlink(docPath(id, doc.fileName));
+  // Remove from manifest
+  collection.manifest.docs = collection.manifest.docs.filter((d) => d.slug !== slug);
+  collection.manifest.updatedAt = new Date().toISOString();
+  await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
+};
 
-  const ordered = [...collection.manifest.docs].sort((a, b) => a.order - b.order);
-  const currentIndex = ordered.findIndex((item) => item.slug === slug);
-  if (currentIndex === -1) throw new Error(`Document not found: ${slug}`);
+export const deleteCollection = async (id: string) => {
+  const dir = collectionDir(id);
+  await fs.rm(dir, { recursive: true, force: true });
+};
 
-  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-  if (targetIndex < 0 || targetIndex >= ordered.length) {
-    return;
-  }
-
-  const current = ordered[currentIndex];
-  const target = ordered[targetIndex];
-  const currentOrder = current.order;
-  current.order = target.order;
-  target.order = currentOrder;
-
+export const updateDocumentTitle = async (id: string, slug: string, title: string) => {
+  const collection = await getCollection(id);
+  if (!collection) throw new Error(`Collection not found: ${id}`);
+  const doc = collection.manifest.docs.find((item) => item.slug === slug);
+  if (!doc) throw new Error(`Document not found: ${slug}`);
+  doc.title = title;
   collection.manifest.updatedAt = new Date().toISOString();
   await fs.writeFile(manifestPath(id), JSON.stringify(collection.manifest, null, 2), "utf8");
 };

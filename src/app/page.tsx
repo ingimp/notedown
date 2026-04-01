@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createCollection, listCollections } from "@/core/notedown/storage";
+import { DeleteCollectionButton } from "./delete-collection-button";
+import { SearchTrigger } from "@/components/search-trigger";
 
 export default async function DashboardPage() {
   const collections = await listCollections();
@@ -10,45 +12,112 @@ export default async function DashboardPage() {
     const title = String(formData.get("title") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     if (!title) return;
-
     const collection = await createCollection({ title, description });
     redirect(`/collections/${collection.id}`);
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
-      <header className="mb-6 flex items-end justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Publication-first authoring</p>
-          <h1 className="text-3xl font-bold">Notedown Dashboard</h1>
+    <div className="min-h-screen bg-gh-canvas-subtle">
+      {/* Header */}
+      <header className="bg-gh-header border-b border-black/20 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-gh-header-text" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M0 1.75A.75.75 0 0 1 .75 1h14.5a.75.75 0 0 1 0 1.5H.75A.75.75 0 0 1 0 1.75Zm0 4A.75.75 0 0 1 .75 5h14.5a.75.75 0 0 1 0 1.5H.75A.75.75 0 0 1 0 5.75Zm0 4A.75.75 0 0 1 .75 9h14.5a.75.75 0 0 1 0 1.5H.75A.75.75 0 0 1 0 9.75Zm0 4A.75.75 0 0 1 .75 13h14.5a.75.75 0 0 1 0 1.5H.75A.75.75 0 0 1 0 13.75Z"/>
+            </svg>
+            <span className="text-gh-header-text font-semibold text-gh-md">Notedown</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <SearchTrigger />
+            <span className="text-gh-header-muted font-mono text-gh-xs">anonymous</span>
+          </div>
         </div>
       </header>
 
-      <section className="mb-8 rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="mb-3 text-xl font-semibold">Create publication</h2>
-        <form action={handleCreateCollection} className="grid gap-3 md:grid-cols-2">
-          <input name="title" placeholder="Title" className="rounded border p-2" required />
-          <input name="description" placeholder="Short description" className="rounded border p-2" />
-          <button type="submit" className="rounded bg-slate-900 px-4 py-2 text-white md:col-span-2 md:w-fit">
-            Create publication
-          </button>
-        </form>
-      </section>
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold text-gh-fg">Le tue raccolte</h1>
+          <p className="text-gh-fg-muted text-gh-md mt-1">Scrivi, organizza ed esporta le tue note in Markdown.</p>
+        </div>
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-xl font-semibold">Collections</h2>
-        <ul className="space-y-3">
-          {collections.map((collection) => (
-            <li key={collection.id} className="rounded border p-3">
-              <Link className="font-semibold text-blue-700" href={`/collections/${collection.id}`}>
-                {collection.title}
-              </Link>
-              <p className="text-sm text-slate-600">{collection.description || "No description"}</p>
-            </li>
-          ))}
-          {collections.length === 0 && <li className="text-slate-500">No collections yet.</li>}
-        </ul>
-      </section>
-    </main>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Create form */}
+          <div className="lg:col-span-1">
+            <div className="bg-gh-canvas border border-gh-border rounded-gh shadow-gh-sm">
+              <div className="px-4 py-3 border-b border-gh-border bg-gh-canvas-subtle rounded-t-gh">
+                <h2 className="text-gh-sm font-semibold text-gh-fg">Nuova raccolta</h2>
+              </div>
+              <div className="p-4">
+                <form action={handleCreateCollection} className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-gh-xs font-semibold text-gh-fg-muted mb-1 uppercase tracking-wide">Titolo</label>
+                    <input
+                      name="title"
+                      placeholder="es. Analisi Matematica"
+                      required
+                      className="w-full px-3 py-1.5 text-gh-sm bg-gh-canvas border border-gh-border rounded-gh focus:outline-none focus:border-gh-accent focus:ring-2 focus:ring-blue-300/40 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gh-xs font-semibold text-gh-fg-muted mb-1 uppercase tracking-wide">Descrizione</label>
+                    <input
+                      name="description"
+                      placeholder="Breve descrizione (opzionale)"
+                      className="w-full px-3 py-1.5 text-gh-sm bg-gh-canvas border border-gh-border rounded-gh focus:outline-none focus:border-gh-accent focus:ring-2 focus:ring-blue-300/40 transition-all"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-1.5 text-gh-sm font-semibold text-white bg-gh-success border border-green-600 rounded-gh hover:bg-green-700 active:bg-green-800 transition-colors shadow-gh-sm"
+                  >
+                    Crea raccolta
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          {/* Collections list */}
+          <div className="lg:col-span-2">
+            <div className="bg-gh-canvas border border-gh-border rounded-gh shadow-gh-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gh-border bg-gh-canvas-subtle flex items-center justify-between">
+                <h2 className="text-gh-sm font-semibold text-gh-fg">Raccolte</h2>
+                <span className="text-gh-xs text-gh-fg-muted font-mono bg-gh-canvas-inset border border-gh-border rounded-full px-2 py-0.5">
+                  {collections.length}
+                </span>
+              </div>
+
+              {collections.length === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <p className="text-gh-fg-muted text-gh-sm">Nessuna raccolta ancora.</p>
+                  <p className="text-gh-fg-subtle text-gh-xs mt-1">Creane una con il form a sinistra.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gh-border">
+                  {collections.map((col) => (
+                    <li key={col.id} className="flex items-center justify-between px-4 py-3 hover:bg-gh-canvas-subtle transition-colors group">
+                      <Link href={`/collections/${col.id}`} className="flex-1 min-w-0 mr-3">
+                        <span className="text-gh-md font-semibold text-gh-accent group-hover:underline block truncate">
+                          {col.title}
+                        </span>
+                        {col.description && (
+                          <span className="text-gh-xs text-gh-fg-muted block mt-0.5 truncate">{col.description}</span>
+                        )}
+                      </Link>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-gh-xs text-gh-fg-muted font-mono">
+                          {col.docs.length} doc{col.docs.length !== 1 ? "s" : ""}
+                        </span>
+                        <DeleteCollectionButton collectionId={col.id} collectionTitle={col.title} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

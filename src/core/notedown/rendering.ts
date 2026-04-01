@@ -7,21 +7,16 @@ import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
 import { NotesCollection, RenderedSite, RenderedSiteDoc } from "./types";
 
-const createBasePipeline = () =>
-  unified()
+export type MarkdownRendererPlugin = (pipeline: ReturnType<typeof unified>) => ReturnType<typeof unified>;
+
+export const createMarkdownRenderer = (plugins: MarkdownRendererPlugin[] = []) => {
+  let pipeline = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
     .use(remarkRehype)
     .use(rehypeKatex)
     .use(rehypeStringify);
-
-type MarkdownPipeline = ReturnType<typeof createBasePipeline>;
-
-export type MarkdownRendererPlugin = (pipeline: MarkdownPipeline) => MarkdownPipeline;
-
-export const createMarkdownRenderer = (plugins: MarkdownRendererPlugin[] = []) => {
-  let pipeline: MarkdownPipeline = createBasePipeline();
 
   for (const plugin of plugins) {
     pipeline = plugin(pipeline);
