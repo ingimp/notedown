@@ -62,68 +62,112 @@ export function WorkspaceShell({
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const renderRequestIdRef = useRef(0);
+  const currentDocRef = useRef(activeSlug);
   const lastSavedTitleRef = useRef(initialDocs.find(d => d.slug === activeSlug)?.title ?? "");
 
-  const renderContent = useCallback(async (md: string) => {
+  const clearPreviewHighlight = useCallback(() => {
+    if (targetClearTimerRef.current) {
+      clearTimeout(targetClearTimerRef.current);
+      targetClearTimerRef.current = null;
+    }
+    if (highlightedNodeRef.current) {
+      highlightedNodeRef.current.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
+      highlightedNodeRef.current = null;
+    }
+  }, []);
+
+  const renderContent = useCallback(async (md: string, slug: string) => {
+    renderRequestIdRef.current += 1;
+    const requestId = renderRequestIdRef.current;
     if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markdown: md }),
-        signal: abortRef.current.signal,
+        signal: controller.signal,
       });
       const data = await res.json();
-      setRawHtml(data.html ?? "");
+      if (requestId === renderRequestIdRef.current && slug === currentDocRef.current) {
+        setRawHtml(data.html ?? "");
+      }
     } catch (e: unknown) {
-      if ((e as Error)?.name !== "AbortError") setRawHtml("");
+      if ((e as Error)?.name !== "AbortError" && requestId === renderRequestIdRef.current && slug === currentDocRef.current) {
+        setRawHtml("");
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (initialMarkdown.trim()) renderContent(initialMarkdown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setDocs(initialDocs);
+  }, [initialDocs]);
 
   useEffect(() => {
+    // Document switches must reset local editor/render/save state to avoid stale buffers leaking across docs.
+    currentDocRef.current = activeSlug;
+    setContent(initialMarkdown);
+    setRawHtml("");
+    setSaveState("saved");
     setTargetBlockId(navigationTargetBlockId ?? "");
-  }, [navigationTargetBlockId, activeSlug]);
+
+    if (renderTimer.current) {
+      clearTimeout(renderTimer.current);
+      renderTimer.current = null;
+    }
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (abortRef.current) abortRef.current.abort();
+    clearPreviewHighlight();
+
+    lastSavedTitleRef.current = initialDocs.find(d => d.slug === activeSlug)?.title ?? extractH1(initialMarkdown) ?? "Senza titolo";
+    if (activeSlug) renderContent(initialMarkdown, activeSlug);
+  }, [activeSlug, initialMarkdown, initialDocs, navigationTargetBlockId, renderContent, clearPreviewHighlight]);
 
   useEffect(() => {
     return () => {
-      if (targetClearTimerRef.current) clearTimeout(targetClearTimerRef.current);
+      if (renderTimer.current) clearTimeout(renderTimer.current);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (abortRef.current) abortRef.current.abort();
+      clearPreviewHighlight();
     };
-  }, []);
+  }, [clearPreviewHighlight]);
 
-  const saveContent = useCallback(async (md: string, title: string) => {
+  const saveContent = useCallback(async (slug: string, md: string, title: string) => {
+    if (!slug || slug !== currentDocRef.current) return;
     setSaveState("saving");
     const titleChanged = title !== lastSavedTitleRef.current;
     try {
-      const res = await fetch(`/api/collections/${collectionId}/docs/${activeSlug}`, {
+      const res = await fetch(`/api/collections/${collectionId}/docs/${slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markdown: md, ...(titleChanged ? { title } : {}) }),
       });
+      if (slug !== currentDocRef.current) return;
       setSaveState(res.ok ? "saved" : "error");
       if (res.ok && titleChanged) lastSavedTitleRef.current = title;
     } catch {
-      setSaveState("error");
+      if (slug === currentDocRef.current) setSaveState("error");
     }
-  }, [collectionId, activeSlug]);
+  }, [collectionId]);
 
   const handleContentChange = useCallback((value: string) => {
     setContent(value);
     setSaveState("unsaved");
 
     if (renderTimer.current) clearTimeout(renderTimer.current);
-    renderTimer.current = setTimeout(() => renderContent(value), 300);
+    const docSlug = activeSlug;
+    renderTimer.current = setTimeout(() => renderContent(value, docSlug), 300);
 
     const title = extractH1(value) || "Senza titolo";
     setDocs(prev => prev.map(d => d.slug === activeSlug ? { ...d, title } : d));
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveContent(value, title), 1500);
+    saveTimer.current = setTimeout(() => saveContent(docSlug, value, title), 1500);
   }, [renderContent, saveContent, activeSlug]);
 
   useEffect(() => {
@@ -131,15 +175,16 @@ export function WorkspaceShell({
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveContent(content, extractH1(content) || "Senza titolo");
+        saveContent(activeSlug, content, extractH1(content) || "Senza titolo");
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [content, saveContent]);
+  }, [activeSlug, content, saveContent]);
 
   useEffect(() => {
     if (!targetBlockId || !activeSlug) return;
+    if (!rawHtml.trim()) return;
 
     const docTitle = extractH1(content) || docs.find((d) => d.slug === activeSlug)?.title || "Senza titolo";
     const parsed = parseMarkdownToBlocks(content, docTitle);
@@ -148,10 +193,7 @@ export function WorkspaceShell({
       return id === targetBlockId;
     });
 
-    if (!target) {
-      setTargetBlockId("");
-      return;
-    }
+    if (!target) return setTargetBlockId("");
 
     const ta = textareaRef.current;
     if (ta) {
@@ -167,30 +209,19 @@ export function WorkspaceShell({
     }
 
     const container = previewScrollRef.current;
-    if (!container) {
-      setTargetBlockId("");
-      return;
-    }
+    if (!container) return;
 
     const blockText = normalizeForMatch(target.raw);
-    if (!blockText) {
-      setTargetBlockId("");
-      return;
-    }
+    if (!blockText) return setTargetBlockId("");
 
     const candidates = Array.from(
       container.querySelectorAll<HTMLElement>(".prose h1, .prose h2, .prose h3, .prose p, .prose li, .prose blockquote, .prose pre")
     );
     const match = candidates.find((node) => normalizeForMatch(node.textContent ?? "").includes(blockText));
 
-    if (!match) {
-      setTargetBlockId("");
-      return;
-    }
+    if (!match) return setTargetBlockId("");
 
-    if (highlightedNodeRef.current) {
-      highlightedNodeRef.current.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
-    }
+    clearPreviewHighlight();
 
     highlightedNodeRef.current = match;
     match.classList.add("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
@@ -200,10 +231,11 @@ export function WorkspaceShell({
     targetClearTimerRef.current = setTimeout(() => {
       match.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
       if (highlightedNodeRef.current === match) highlightedNodeRef.current = null;
+      targetClearTimerRef.current = null;
     }, 2200);
 
     setTargetBlockId("");
-  }, [targetBlockId, activeSlug, content, collectionId, docs]);
+  }, [targetBlockId, activeSlug, content, collectionId, docs, rawHtml, clearPreviewHighlight]);
 
   async function handleDeleteDoc(slug: string) {
     setDeletingSlug(slug);
