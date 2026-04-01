@@ -23,9 +23,11 @@ type BlockDocMeta = {
 };
 
 export type BlockMatch = {
+  blockId: string;
   blockType: IndexedBlock["type"];
   path: string[];
   snippet: string;
+  raw: string;
   score: number;
 };
 
@@ -67,7 +69,7 @@ const countOccurrences = (haystack: string, needle: string) => {
   return count;
 };
 
-const makeBlockId = (meta: Pick<IndexedBlock, "collectionId" | "docSlug" | "type">, index: number) =>
+export const createBlockId = (meta: Pick<IndexedBlock, "collectionId" | "docSlug" | "type">, index: number) =>
   `${meta.collectionId}:${meta.docSlug}:${meta.type}:${index}`;
 
 const buildSnippet = (text: string, query: string, maxLength = 140) => {
@@ -186,7 +188,7 @@ const buildBlockSearchIndex = async (): Promise<BlockSearchIndex> => {
       const parsed = parseMarkdownToBlocks(doc.markdown, doc.meta.title);
       parsed.forEach((block, index) => {
         blocks.push({
-          id: makeBlockId({ collectionId: collection.manifest.id, docSlug: doc.meta.slug, type: block.type }, index),
+          id: createBlockId({ collectionId: collection.manifest.id, docSlug: doc.meta.slug, type: block.type }, index),
           collectionId: collection.manifest.id,
           docSlug: doc.meta.slug,
           ...block,
@@ -241,9 +243,11 @@ export const searchBlocks = async (
     };
 
     entry.matches.push({
+      blockId: block.id,
       blockType: block.type,
       path: block.path,
       snippet: buildSnippet(block.text, normalizedQuery),
+      raw: block.raw,
       score,
     });
     entry.topScore = Math.max(entry.topScore, score);

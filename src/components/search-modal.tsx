@@ -83,8 +83,8 @@ export function SearchModal() {
     const item = items[idx];
     if (!item) return;
     setOpen(false);
-    const hl = encodeURIComponent(query.trim());
-    router.push(`/collections/${item.result.collectionId}?doc=${item.result.docSlug}&hl=${hl}`);
+    const bid = encodeURIComponent(item.match.blockId);
+    router.push(`/collections/${item.result.collectionId}?doc=${item.result.docSlug}&target=${bid}`);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {

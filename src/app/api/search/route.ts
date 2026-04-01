@@ -4,9 +4,11 @@ import { searchBlocks } from "@/core/notedown/searchBlocks";
 const MAX_RESULTS = 30;
 
 export interface BlockMatch {
+  blockId: string;
   blockType: string;
   path: string[];
   snippet: string;
+  raw: string;
   score: number;
 }
 
