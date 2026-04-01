@@ -21,6 +21,7 @@ interface Props {
   activeSlug: string;
   initialMarkdown: string;
   navigationTargetBlockId?: string;
+  navigationTargetQuery?: string;
 }
 
 function extractH1(md: string): string | null {
@@ -32,6 +33,56 @@ function normalizeForMatch(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function normalizeWithMap(value: string): { normalized: string; map: number[] } {
+  const chars: string[] = [];
+  const map: number[] = [];
+  let inWhitespace = false;
+
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (/\s/.test(ch)) {
+      if (chars.length > 0 && !inWhitespace) {
+        chars.push(" ");
+        map.push(i);
+      }
+      inWhitespace = true;
+      continue;
+    }
+    chars.push(ch.toLowerCase());
+    map.push(i);
+    inWhitespace = false;
+  }
+
+  if (chars[chars.length - 1] === " ") {
+    chars.pop();
+    map.pop();
+  }
+
+  return { normalized: chars.join(""), map };
+}
+
+function findQueryRangeInBlock(blockRaw: string, query: string): { start: number; end: number } | null {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return null;
+
+  const directIndex = blockRaw.toLowerCase().indexOf(trimmedQuery.toLowerCase());
+  if (directIndex >= 0) {
+    return { start: directIndex, end: directIndex + trimmedQuery.length };
+  }
+
+  const blockNormalized = normalizeWithMap(blockRaw);
+  const queryNormalized = normalizeWithMap(trimmedQuery);
+  if (!queryNormalized.normalized) return null;
+
+  const normalizedIndex = blockNormalized.normalized.indexOf(queryNormalized.normalized);
+  if (normalizedIndex < 0) return null;
+
+  const start = blockNormalized.map[normalizedIndex];
+  const endIndex = normalizedIndex + queryNormalized.normalized.length - 1;
+  const end = (blockNormalized.map[endIndex] ?? start) + 1;
+  return { start, end };
+}
+
 export function WorkspaceShell({
   collectionId,
   collectionTitle,
@@ -39,6 +90,7 @@ export function WorkspaceShell({
   activeSlug,
   initialMarkdown,
   navigationTargetBlockId,
+  navigationTargetQuery,
 }: Props) {
   const router = useRouter();
 
@@ -54,6 +106,7 @@ export function WorkspaceShell({
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showPreview, setShowPreview] = useState(true);
   const [targetBlockId, setTargetBlockId] = useState(navigationTargetBlockId ?? "");
+  const [targetQuery, setTargetQuery] = useState(navigationTargetQuery ?? "");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
@@ -65,6 +118,11 @@ export function WorkspaceShell({
   const renderRequestIdRef = useRef(0);
   const currentDocRef = useRef(activeSlug);
   const lastSavedTitleRef = useRef(initialDocs.find(d => d.slug === activeSlug)?.title ?? "");
+
+  const clearNavigationTarget = useCallback(() => {
+    setTargetBlockId("");
+    setTargetQuery("");
+  }, []);
 
   const clearPreviewHighlight = useCallback(() => {
     if (targetClearTimerRef.current) {
@@ -112,6 +170,7 @@ export function WorkspaceShell({
     setRawHtml("");
     setSaveState("saved");
     setTargetBlockId(navigationTargetBlockId ?? "");
+    setTargetQuery(navigationTargetQuery ?? "");
 
     if (renderTimer.current) {
       clearTimeout(renderTimer.current);
@@ -126,7 +185,7 @@ export function WorkspaceShell({
 
     lastSavedTitleRef.current = initialDocs.find(d => d.slug === activeSlug)?.title ?? extractH1(initialMarkdown) ?? "Senza titolo";
     if (activeSlug) renderContent(initialMarkdown, activeSlug);
-  }, [activeSlug, initialMarkdown, initialDocs, navigationTargetBlockId, renderContent, clearPreviewHighlight]);
+  }, [activeSlug, initialMarkdown, initialDocs, navigationTargetBlockId, navigationTargetQuery, renderContent, clearPreviewHighlight]);
 
   useEffect(() => {
     return () => {
@@ -193,19 +252,23 @@ export function WorkspaceShell({
       return id === targetBlockId;
     });
 
-    if (!target) return setTargetBlockId("");
+    if (!target) {
+      clearNavigationTarget();
+      return;
+    }
 
     const ta = textareaRef.current;
     if (ta) {
-      const textNeedle = target.raw.trim();
-      const start = textNeedle ? content.indexOf(textNeedle) : -1;
-      if (start >= 0) {
-        const end = start + textNeedle.length;
+      const blockStart = content.indexOf(target.raw);
+      if (blockStart >= 0) {
+        const queryRange = findQueryRangeInBlock(target.raw, targetQuery);
+        const selectionStart = queryRange ? blockStart + queryRange.start : blockStart;
+        const selectionEnd = queryRange ? blockStart + queryRange.end : blockStart;
         // One-shot selection for global-search navigation only: we do not keep editor search state.
         ta.focus({ preventScroll: true });
-        ta.setSelectionRange(start, end);
+        ta.setSelectionRange(selectionStart, selectionEnd);
 
-        const before = content.slice(0, start);
+        const before = content.slice(0, blockStart);
         const lines = before.split("\n").length - 1;
         const totalLines = content.split("\n").length;
         const ratio = lines / Math.max(totalLines - 1, 1);
@@ -217,14 +280,20 @@ export function WorkspaceShell({
     if (!container) return;
 
     const blockText = normalizeForMatch(target.raw);
-    if (!blockText) return setTargetBlockId("");
+    if (!blockText) {
+      clearNavigationTarget();
+      return;
+    }
 
     const candidates = Array.from(
       container.querySelectorAll<HTMLElement>(".prose h1, .prose h2, .prose h3, .prose p, .prose li, .prose blockquote, .prose pre")
     );
     const match = candidates.find((node) => normalizeForMatch(node.textContent ?? "").includes(blockText));
 
-    if (!match) return setTargetBlockId("");
+    if (!match) {
+      clearNavigationTarget();
+      return;
+    }
 
     clearPreviewHighlight();
 
@@ -239,8 +308,8 @@ export function WorkspaceShell({
       targetClearTimerRef.current = null;
     }, 2200);
 
-    setTargetBlockId("");
-  }, [targetBlockId, activeSlug, content, collectionId, docs, rawHtml, clearPreviewHighlight]);
+    clearNavigationTarget();
+  }, [targetBlockId, activeSlug, content, collectionId, docs, rawHtml, clearPreviewHighlight, targetQuery, clearNavigationTarget]);
 
   async function handleDeleteDoc(slug: string) {
     setDeletingSlug(slug);
