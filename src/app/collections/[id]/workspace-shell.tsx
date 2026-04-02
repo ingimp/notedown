@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createBlockId, parseMarkdownToBlocks } from "@/core/notedown/searchBlocksShared";
+import { createBlockId, getPreviewMatchText, parseMarkdownToBlocks } from "@/core/notedown/searchBlocksShared";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
 
@@ -276,7 +276,7 @@ export function WorkspaceShell({
     const container = previewScrollRef.current;
     if (!container) return;
 
-    const blockText = normalizeForMatch(target.raw);
+    const blockText = normalizeForMatch(getPreviewMatchText(target));
     if (!blockText) {
       clearNavigationTarget();
       return;

@@ -3,6 +3,7 @@ export type BlockType = "title" | "heading" | "paragraph";
 export type ParsedBlock = {
   type: BlockType;
   text: string;
+  plainText: string;
   raw: string;
   start: number;
   end: number;
@@ -25,6 +26,8 @@ export const normalizeSearchText = (input: string) =>
 
 export const createBlockId = (meta: { collectionId: string; docSlug: string; type: BlockType }, index: number) =>
   `${meta.collectionId}:${meta.docSlug}:${meta.type}:${index}`;
+
+export const getPreviewMatchText = (block: ParsedBlock) => block.plainText || block.raw;
 
 export function parseMarkdownToBlocks(markdown: string, docTitle: string): ParsedBlock[] {
   const lineParts = markdown.match(/.*(?:\r?\n|$)/g) ?? [];
@@ -55,6 +58,7 @@ export function parseMarkdownToBlocks(markdown: string, docTitle: string): Parse
       blocks.push({
         type: "paragraph",
         text,
+        plainText: raw,
         raw,
         start: paragraphStart,
         end: paragraphEnd,
@@ -81,6 +85,7 @@ export function parseMarkdownToBlocks(markdown: string, docTitle: string): Parse
         blocks.push({
           type: "title",
           text,
+          plainText: titleMatch[1].trim(),
           raw,
           start: lineStart,
           end: lineEnd,
@@ -109,6 +114,7 @@ export function parseMarkdownToBlocks(markdown: string, docTitle: string): Parse
         blocks.push({
           type: "heading",
           text,
+          plainText: headingText,
           raw,
           start: lineStart,
           end: lineEnd,
