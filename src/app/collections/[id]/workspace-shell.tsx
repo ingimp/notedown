@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createBlockId, getPreviewMatchText, parseMarkdownToBlocks } from "@/core/notedown/searchBlocksShared";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
 
@@ -20,67 +19,11 @@ interface Props {
   docs: DocItem[];
   activeSlug: string;
   initialMarkdown: string;
-  navigationTargetBlockId?: string;
-  navigationTargetQuery?: string;
 }
 
 function extractH1(md: string): string | null {
   const match = md.match(/^#[ \t]+(.+)$/m);
   return match ? match[1].trim() : null;
-}
-
-function normalizeForMatch(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function normalizeWithMap(value: string): { normalized: string; map: number[] } {
-  const chars: string[] = [];
-  const map: number[] = [];
-  let inWhitespace = false;
-
-  for (let i = 0; i < value.length; i += 1) {
-    const ch = value[i];
-    if (/\s/.test(ch)) {
-      if (chars.length > 0 && !inWhitespace) {
-        chars.push(" ");
-        map.push(i);
-      }
-      inWhitespace = true;
-      continue;
-    }
-    chars.push(ch.toLowerCase());
-    map.push(i);
-    inWhitespace = false;
-  }
-
-  if (chars[chars.length - 1] === " ") {
-    chars.pop();
-    map.pop();
-  }
-
-  return { normalized: chars.join(""), map };
-}
-
-function findQueryRangeInBlock(blockRaw: string, query: string): { start: number; end: number } | null {
-  const trimmedQuery = query.trim();
-  if (!trimmedQuery) return null;
-
-  const directIndex = blockRaw.toLowerCase().indexOf(trimmedQuery.toLowerCase());
-  if (directIndex >= 0) {
-    return { start: directIndex, end: directIndex + trimmedQuery.length };
-  }
-
-  const blockNormalized = normalizeWithMap(blockRaw);
-  const queryNormalized = normalizeWithMap(trimmedQuery);
-  if (!queryNormalized.normalized) return null;
-
-  const normalizedIndex = blockNormalized.normalized.indexOf(queryNormalized.normalized);
-  if (normalizedIndex < 0) return null;
-
-  const start = blockNormalized.map[normalizedIndex];
-  const endIndex = normalizedIndex + queryNormalized.normalized.length - 1;
-  const end = (blockNormalized.map[endIndex] ?? start) + 1;
-  return { start, end };
 }
 
 export function WorkspaceShell({
@@ -89,8 +32,6 @@ export function WorkspaceShell({
   docs: initialDocs,
   activeSlug,
   initialMarkdown,
-  navigationTargetBlockId,
-  navigationTargetQuery,
 }: Props) {
   const router = useRouter();
 
@@ -105,35 +46,15 @@ export function WorkspaceShell({
   const [rawHtml, setRawHtml] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showPreview, setShowPreview] = useState(true);
-  const [targetBlockId, setTargetBlockId] = useState(navigationTargetBlockId ?? "");
-  const [targetQuery, setTargetQuery] = useState(navigationTargetQuery ?? "");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
-  const highlightedNodeRef = useRef<HTMLElement | null>(null);
-  const targetClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const renderRequestIdRef = useRef(0);
   const currentDocRef = useRef(activeSlug);
   const lastSavedTitleRef = useRef(initialDocs.find(d => d.slug === activeSlug)?.title ?? "");
-
-  const clearNavigationTarget = useCallback(() => {
-    setTargetBlockId("");
-    setTargetQuery("");
-  }, []);
-
-  const clearPreviewHighlight = useCallback(() => {
-    if (targetClearTimerRef.current) {
-      clearTimeout(targetClearTimerRef.current);
-      targetClearTimerRef.current = null;
-    }
-    if (highlightedNodeRef.current) {
-      highlightedNodeRef.current.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
-      highlightedNodeRef.current = null;
-    }
-  }, []);
 
   const renderContent = useCallback(async (md: string, slug: string) => {
     renderRequestIdRef.current += 1;
@@ -169,8 +90,6 @@ export function WorkspaceShell({
     setContent(initialMarkdown);
     setRawHtml("");
     setSaveState("saved");
-    setTargetBlockId(navigationTargetBlockId ?? "");
-    setTargetQuery(navigationTargetQuery ?? "");
 
     if (renderTimer.current) {
       clearTimeout(renderTimer.current);
@@ -181,20 +100,18 @@ export function WorkspaceShell({
       saveTimer.current = null;
     }
     if (abortRef.current) abortRef.current.abort();
-    clearPreviewHighlight();
 
     lastSavedTitleRef.current = initialDocs.find(d => d.slug === activeSlug)?.title ?? extractH1(initialMarkdown) ?? "Senza titolo";
     if (activeSlug) renderContent(initialMarkdown, activeSlug);
-  }, [activeSlug, initialMarkdown, initialDocs, navigationTargetBlockId, navigationTargetQuery, renderContent, clearPreviewHighlight]);
+  }, [activeSlug, initialMarkdown, initialDocs, renderContent]);
 
   useEffect(() => {
     return () => {
       if (renderTimer.current) clearTimeout(renderTimer.current);
       if (saveTimer.current) clearTimeout(saveTimer.current);
       if (abortRef.current) abortRef.current.abort();
-      clearPreviewHighlight();
     };
-  }, [clearPreviewHighlight]);
+  }, []);
 
   const saveContent = useCallback(async (slug: string, md: string, title: string) => {
     if (!slug || slug !== currentDocRef.current) return;
@@ -240,73 +157,6 @@ export function WorkspaceShell({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeSlug, content, saveContent]);
-
-  useEffect(() => {
-    if (!targetBlockId || !activeSlug) return;
-    if (!rawHtml.trim()) return;
-
-    const docTitle = extractH1(content) || docs.find((d) => d.slug === activeSlug)?.title || "Senza titolo";
-    const parsed = parseMarkdownToBlocks(content, docTitle);
-    const target = parsed.find((block, index) => {
-      const id = createBlockId({ collectionId, docSlug: activeSlug, type: block.type }, index);
-      return id === targetBlockId;
-    });
-
-    if (!target) {
-      clearNavigationTarget();
-      return;
-    }
-
-    const ta = textareaRef.current;
-    if (ta) {
-      const queryRange = findQueryRangeInBlock(target.raw, targetQuery);
-      const selectionStart = queryRange ? target.start + queryRange.start : target.start;
-      const selectionEnd = queryRange ? target.start + queryRange.end : target.end;
-      // One-shot selection for global-search navigation only: we do not keep editor search state.
-      ta.focus({ preventScroll: true });
-      ta.setSelectionRange(selectionStart, selectionEnd);
-
-      const before = content.slice(0, target.start);
-      const lines = before.split("\n").length - 1;
-      const totalLines = content.split("\n").length;
-      const ratio = lines / Math.max(totalLines - 1, 1);
-      ta.scrollTop = Math.max(0, ratio * ta.scrollHeight - ta.clientHeight / 2);
-    }
-
-    const container = previewScrollRef.current;
-    if (!container) return;
-
-    const blockText = normalizeForMatch(getPreviewMatchText(target));
-    if (!blockText) {
-      clearNavigationTarget();
-      return;
-    }
-
-    const candidates = Array.from(
-      container.querySelectorAll<HTMLElement>(".prose h1, .prose h2, .prose h3, .prose p, .prose li, .prose blockquote, .prose pre")
-    );
-    const match = candidates.find((node) => normalizeForMatch(node.textContent ?? "").includes(blockText));
-
-    if (!match) {
-      clearNavigationTarget();
-      return;
-    }
-
-    clearPreviewHighlight();
-
-    highlightedNodeRef.current = match;
-    match.classList.add("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
-    match.scrollIntoView({ block: "center", behavior: "smooth" });
-
-    if (targetClearTimerRef.current) clearTimeout(targetClearTimerRef.current);
-    targetClearTimerRef.current = setTimeout(() => {
-      match.classList.remove("bg-yellow-100/80", "ring-2", "ring-yellow-300", "rounded-md", "transition-colors");
-      if (highlightedNodeRef.current === match) highlightedNodeRef.current = null;
-      targetClearTimerRef.current = null;
-    }, 2200);
-
-    clearNavigationTarget();
-  }, [targetBlockId, activeSlug, content, collectionId, docs, rawHtml, clearPreviewHighlight, targetQuery, clearNavigationTarget]);
 
   async function handleDeleteDoc(slug: string) {
     setDeletingSlug(slug);

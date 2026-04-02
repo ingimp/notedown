@@ -1,7 +1,6 @@
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import type { Metadata } from "next";
-import { SearchModal } from "@/components/search-modal";
 
 export const metadata: Metadata = {
   title: "Notedown",
@@ -11,10 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="it">
-      <body>
-        {children}
-        <SearchModal />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

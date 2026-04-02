@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { getCollection } from "@/core/notedown/storage";
 import { WorkspaceShell } from "./workspace-shell";
-import { SearchTrigger } from "@/components/search-trigger";
 import Link from "next/link";
 
 export default async function CollectionWorkspacePage({
@@ -9,10 +8,10 @@ export default async function CollectionWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ doc?: string; target?: string; q?: string }>;
+  searchParams: Promise<{ doc?: string }>;
 }) {
   const { id } = await params;
-  const { doc, target, q } = await searchParams;
+  const { doc } = await searchParams;
   const collection = await getCollection(id);
   if (!collection) notFound();
 
@@ -40,7 +39,6 @@ export default async function CollectionWorkspacePage({
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <SearchTrigger compact />
           <Link
             href={`/preview/${id}${selected ? `/docs/${selected.slug}` : ""}`}
             className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors"
@@ -69,8 +67,6 @@ export default async function CollectionWorkspacePage({
           docs={sortedDocs}
           activeSlug={selected.slug}
           initialMarkdown={selectedDoc.markdown}
-          navigationTargetBlockId={target}
-          navigationTargetQuery={q}
         />
       ) : (
         /* No docs yet — show empty state inside shell layout */
