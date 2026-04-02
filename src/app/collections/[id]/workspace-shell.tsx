@@ -259,21 +259,18 @@ export function WorkspaceShell({
 
     const ta = textareaRef.current;
     if (ta) {
-      const blockStart = content.indexOf(target.raw);
-      if (blockStart >= 0) {
-        const queryRange = findQueryRangeInBlock(target.raw, targetQuery);
-        const selectionStart = queryRange ? blockStart + queryRange.start : blockStart;
-        const selectionEnd = queryRange ? blockStart + queryRange.end : blockStart;
-        // One-shot selection for global-search navigation only: we do not keep editor search state.
-        ta.focus({ preventScroll: true });
-        ta.setSelectionRange(selectionStart, selectionEnd);
+      const queryRange = findQueryRangeInBlock(target.raw, targetQuery);
+      const selectionStart = queryRange ? target.start + queryRange.start : target.start;
+      const selectionEnd = queryRange ? target.start + queryRange.end : target.end;
+      // One-shot selection for global-search navigation only: we do not keep editor search state.
+      ta.focus({ preventScroll: true });
+      ta.setSelectionRange(selectionStart, selectionEnd);
 
-        const before = content.slice(0, blockStart);
-        const lines = before.split("\n").length - 1;
-        const totalLines = content.split("\n").length;
-        const ratio = lines / Math.max(totalLines - 1, 1);
-        ta.scrollTop = Math.max(0, ratio * ta.scrollHeight - ta.clientHeight / 2);
-      }
+      const before = content.slice(0, target.start);
+      const lines = before.split("\n").length - 1;
+      const totalLines = content.split("\n").length;
+      const ratio = lines / Math.max(totalLines - 1, 1);
+      ta.scrollTop = Math.max(0, ratio * ta.scrollHeight - ta.clientHeight / 2);
     }
 
     const container = previewScrollRef.current;
