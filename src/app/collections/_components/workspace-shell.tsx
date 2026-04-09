@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { buildCreateDocumentApiPath, buildDocumentApiPath, buildEditorCollectionPath, buildEditorDocumentPath } from "@/core/notedown/paths";
 import { extractH1, slugifyDocumentTitle } from "@/core/notedown/slug";
+import { hasConflictingSiblingSlug } from "@/core/notedown/slug-conflict";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
 
@@ -136,7 +137,7 @@ export function WorkspaceShell({
 
       const nextTitleFromMarkdown = extractH1(md) || savedTitlesBySlug[slug] || "Senza titolo";
       const nextSlugFromMarkdown = slugifyDocumentTitle(nextTitleFromMarkdown);
-      const hasLocalDuplicate = nextSlugFromMarkdown !== slug && docs.some((doc) => doc.slug === nextSlugFromMarkdown);
+      const hasLocalDuplicate = hasConflictingSiblingSlug(docs, nextSlugFromMarkdown, slug);
       if (hasLocalDuplicate) {
         setSaveState("error");
         setErrorMessage("Esiste già un documento con questo nome.");
