@@ -7,10 +7,10 @@ import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
 import { NotesCollection, RenderedSite, RenderedSiteDoc } from "./types";
 
-export type MarkdownRendererPlugin = (pipeline: ReturnType<typeof unified>) => ReturnType<typeof unified>;
+export type MarkdownRendererPlugin = (pipeline: any) => any;
 
 export const createMarkdownRenderer = (plugins: MarkdownRendererPlugin[] = []) => {
-  let pipeline = unified()
+  let pipeline: any = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
@@ -26,7 +26,7 @@ export const createMarkdownRenderer = (plugins: MarkdownRendererPlugin[] = []) =
     render: async (markdown: string) => {
       const file = await pipeline.process(markdown);
       return String(file.value);
-    }
+    },
   };
 };
 
@@ -40,31 +40,21 @@ export const renderCollection = async (collection: NotesCollection): Promise<Ren
       title: doc.meta.title,
       order: doc.meta.order,
       html: await renderer.render(doc.markdown),
-      previous:
-        index > 0
-          ? {
-              slug: ordered[index - 1].meta.slug,
-              title: ordered[index - 1].meta.title
-            }
-          : null,
-      next:
-        index < ordered.length - 1
-          ? {
-              slug: ordered[index + 1].meta.slug,
-              title: ordered[index + 1].meta.title
-            }
-          : null,
-      overviewHref: "index.html"
+      previous: index > 0 ? { slug: ordered[index - 1].meta.slug, title: ordered[index - 1].meta.title } : null,
+      next: index < ordered.length - 1 ? { slug: ordered[index + 1].meta.slug, title: ordered[index + 1].meta.title } : null,
+      overviewHref: "index.html",
     }))
   );
 
   return {
     collection: {
       id: collection.manifest.id,
+      username: collection.manifest.username,
+      slug: collection.manifest.slug,
       title: collection.manifest.title,
       description: collection.manifest.description,
-      overviewHref: "index.html"
+      overviewHref: "index.html",
     },
-    docs
+    docs,
   };
 };
