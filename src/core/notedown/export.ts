@@ -17,13 +17,26 @@ ${body}
 </body>
 </html>`;
 
-const buildIndexPage = (collectionTitle: string, description: string, docs: Array<{ slug: string; title: string }>) =>
+const buildCollectionEmptyIndexPage = (collectionTitle: string, description: string) =>
   shell(
     collectionTitle,
-    `<main><h1>${collectionTitle}</h1>${description ? `<p>${description}</p>` : ""}<ul>${docs
-      .map((d) => `<li><a href="${d.slug}/index.html">${d.title}</a></li>`)
-      .join("")}</ul></main>`
+    `<main><h1>${collectionTitle}</h1>${description ? `<p>${description}</p>` : ""}<p>Nessun documento.</p></main>`
   );
+
+const buildCollectionRootRedirectPage = (collectionTitle: string, firstDocSlug: string) =>
+  `<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="refresh" content="0; url=./${firstDocSlug}/index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${collectionTitle}</title>
+</head>
+<body>
+  <p>Redirecting to <a href="./${firstDocSlug}/index.html">${firstDocSlug}</a>…</p>
+  <script>location.replace('./${firstDocSlug}/index.html');</script>
+</body>
+</html>`;
 
 const buildDocPage = (
   docTitle: string,
@@ -49,7 +62,11 @@ export const buildStaticSiteZip = async (username: string, collectionSlug: strin
   const root = `${username}/${collectionSlug}`;
   const allDocs = rendered.docs.map((d) => ({ slug: d.slug, title: d.title }));
 
-  zip.file(`${root}/index.html`, buildIndexPage(rendered.collection.title, rendered.collection.description, allDocs));
+  if (allDocs[0]) {
+    zip.file(`${root}/index.html`, buildCollectionRootRedirectPage(rendered.collection.title, allDocs[0].slug));
+  } else {
+    zip.file(`${root}/index.html`, buildCollectionEmptyIndexPage(rendered.collection.title, rendered.collection.description));
+  }
 
   rendered.docs.forEach((doc) => {
     zip.file(`${root}/${doc.slug}/index.html`, buildDocPage(doc.title, rendered.collection.title, doc.html, doc.previous, doc.next));

@@ -1,7 +1,12 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getCollection } from "@/core/notedown/storage";
-import { buildPreviewDocumentPath, buildPreviewCollectionPath } from "@/core/notedown/paths";
+import {
+  buildExportPath,
+  buildPreviewDocumentPath,
+  buildPreviewCollectionPath,
+  buildEditorDocumentPath,
+} from "@/core/notedown/paths";
 import { WorkspaceShell } from "@/app/collections/_components/workspace-shell";
 
 export default async function CollectionWorkspacePage({
@@ -15,9 +20,14 @@ export default async function CollectionWorkspacePage({
 
   const sortedDocs = [...collection.manifest.docs].sort((a, b) => a.order - b.order);
   const requestedSlug = docSlug?.[0];
+
+  if (!requestedSlug && sortedDocs[0]) {
+    redirect(buildEditorDocumentPath(username, collectionSlug, sortedDocs[0].slug));
+  }
+
   const selected = requestedSlug
     ? sortedDocs.find((d) => d.slug === requestedSlug) ?? null
-    : sortedDocs[0] ?? null;
+    : null;
 
   if (requestedSlug && !selected) notFound();
 
@@ -34,7 +44,7 @@ export default async function CollectionWorkspacePage({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Link href={selected ? buildPreviewDocumentPath(username, collectionSlug, selected.slug) : buildPreviewCollectionPath(username, collectionSlug)} className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors">Preview</Link>
-          <a href={`/collections/${username}/${collectionSlug}/export`} className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors">Export</a>
+          <a href={buildExportPath(username, collectionSlug)} className="flex items-center gap-1 px-3 py-1 text-gh-xs font-semibold text-gh-header-text bg-white/10 border border-white/20 rounded-gh hover:bg-white/20 transition-colors">Export</a>
         </div>
       </header>
 

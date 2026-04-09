@@ -22,3 +22,6 @@ export const buildDocumentApiPath = (username: string, collectionSlug: string, d
 
 export const buildCreateDocumentApiPath = (username: string, collectionSlug: string) =>
   `/api/collections/${username}/${collectionSlug}/docs`;
+
+export const buildExportPath = (username: string, collectionSlug: string) =>
+  `/collections/${username}/${collectionSlug}/export`;

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { buildCreateDocumentApiPath, buildDocumentApiPath, buildEditorCollectionPath, buildEditorDocumentPath } from "@/core/notedown/paths";
-import { extractH1 } from "@/core/notedown/slug";
+import { extractH1, slugifyDocumentTitle } from "@/core/notedown/slug";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
 
@@ -24,6 +24,13 @@ interface Props {
   initialMarkdown: string;
 }
 
+function getConflictMessage(raw: string, fallback: string) {
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("collection")) return "Esiste già una collection con questo nome.";
+  if (normalized.includes("document") || normalized.includes("slug")) return "Esiste già un documento con questo nome.";
+  return fallback;
+}
+
 export function WorkspaceShell({
   username,
   collectionSlug,
@@ -36,6 +43,9 @@ export function WorkspaceShell({
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [docs, setDocs] = useState<DocItem[]>(initialDocs);
+  const [savedTitlesBySlug, setSavedTitlesBySlug] = useState<Record<string, string>>(
+    Object.fromEntries(initialDocs.map((doc) => [doc.slug, doc.title]))
+  );
   const [addTitle, setAddTitle] = useState("");
   const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -45,6 +55,7 @@ export function WorkspaceShell({
   const [rawHtml, setRawHtml] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showPreview, setShowPreview] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
@@ -80,6 +91,7 @@ export function WorkspaceShell({
 
   useEffect(() => {
     setDocs(initialDocs);
+    setSavedTitlesBySlug(Object.fromEntries(initialDocs.map((doc) => [doc.slug, doc.title])));
   }, [initialDocs]);
 
   useEffect(() => {
@@ -87,6 +99,7 @@ export function WorkspaceShell({
     setContent(initialMarkdown);
     setRawHtml("");
     setSaveState("saved");
+    setErrorMessage(null);
 
     if (renderTimer.current) {
       clearTimeout(renderTimer.current);
@@ -109,10 +122,28 @@ export function WorkspaceShell({
     };
   }, []);
 
+  const rollbackCurrentDocTitle = useCallback((slug: string) => {
+    const safeTitle = savedTitlesBySlug[slug];
+    if (!safeTitle) return;
+    setDocs((prev) => prev.map((doc) => (doc.slug === slug ? { ...doc, title: safeTitle } : doc)));
+  }, [savedTitlesBySlug]);
+
   const saveContent = useCallback(
     async (slug: string, md: string) => {
       if (!slug || slug !== currentDocRef.current) return;
       setSaveState("saving");
+      setErrorMessage(null);
+
+      const nextTitleFromMarkdown = extractH1(md) || savedTitlesBySlug[slug] || "Senza titolo";
+      const nextSlugFromMarkdown = slugifyDocumentTitle(nextTitleFromMarkdown);
+      const hasLocalDuplicate = nextSlugFromMarkdown !== slug && docs.some((doc) => doc.slug === nextSlugFromMarkdown);
+      if (hasLocalDuplicate) {
+        setSaveState("error");
+        setErrorMessage("Esiste già un documento con questo nome.");
+        rollbackCurrentDocTitle(slug);
+        return;
+      }
+
       try {
         const res = await fetch(buildDocumentApiPath(username, collectionSlug, slug), {
           method: "PUT",
@@ -124,6 +155,12 @@ export function WorkspaceShell({
 
         if (!res.ok) {
           setSaveState("error");
+          if (res.status === 409) {
+            setErrorMessage(getConflictMessage(String(data?.error ?? ""), "Esiste già un documento con questo nome."));
+            rollbackCurrentDocTitle(slug);
+            return;
+          }
+          setErrorMessage("Salvataggio non riuscito. Riprova.");
           return;
         }
 
@@ -132,6 +169,11 @@ export function WorkspaceShell({
         const nextFileName = data.fileName as string;
 
         setDocs((prev) => prev.map((d) => (d.slug === slug ? { ...d, slug: nextSlug, title: nextTitle, fileName: nextFileName } : d)));
+        setSavedTitlesBySlug((prev) => {
+          const next = { ...prev, [nextSlug]: nextTitle };
+          if (nextSlug !== slug) delete next[slug];
+          return next;
+        });
         setSaveState("saved");
 
         if (nextSlug !== slug) {
@@ -139,15 +181,19 @@ export function WorkspaceShell({
           router.replace(buildEditorDocumentPath(username, collectionSlug, nextSlug));
         }
       } catch {
-        if (slug === currentDocRef.current) setSaveState("error");
+        if (slug === currentDocRef.current) {
+          setSaveState("error");
+          setErrorMessage("Salvataggio non riuscito. Riprova.");
+        }
       }
     },
-    [collectionSlug, router, username]
+    [collectionSlug, docs, rollbackCurrentDocTitle, router, savedTitlesBySlug, username]
   );
 
   const handleContentChange = useCallback((value: string) => {
     setContent(value);
     setSaveState("unsaved");
+    setErrorMessage(null);
 
     if (renderTimer.current) clearTimeout(renderTimer.current);
     const docSlug = currentDocRef.current;
@@ -177,6 +223,11 @@ export function WorkspaceShell({
     await fetch(buildDocumentApiPath(username, collectionSlug, slug), { method: "DELETE" });
     const remaining = docs.filter((d) => d.slug !== slug);
     setDocs(remaining);
+    setSavedTitlesBySlug((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
     setConfirmDelete(null);
     setDeletingSlug(null);
     if (slug === activeSlug) {
@@ -192,7 +243,17 @@ export function WorkspaceShell({
     e.preventDefault();
     const title = addTitle.trim();
     if (!title) return;
+
+    const targetSlug = slugifyDocumentTitle(title);
+    const hasLocalDuplicate = docs.some((doc) => doc.slug === targetSlug);
+    if (hasLocalDuplicate) {
+      setSaveState("error");
+      setErrorMessage("Esiste già un documento con questo nome.");
+      return;
+    }
+
     setAdding(true);
+    setErrorMessage(null);
     const res = await fetch(buildCreateDocumentApiPath(username, collectionSlug), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -202,11 +263,19 @@ export function WorkspaceShell({
     setAdding(false);
     if (!res.ok) {
       setSaveState("error");
+      setErrorMessage(
+        res.status === 409
+          ? getConflictMessage(String(data?.error ?? ""), "Esiste già un documento con questo nome.")
+          : "Creazione documento non riuscita."
+      );
       return;
     }
+
     setAddTitle("");
     if (data.slug) {
       setDocs((prev) => [...prev, { slug: data.slug, title, order: prev.length, fileName: data.fileName ?? "" }]);
+      setSavedTitlesBySlug((prev) => ({ ...prev, [data.slug]: title }));
+      setSaveState("saved");
       router.push(buildEditorDocumentPath(username, collectionSlug, data.slug));
     }
   }
@@ -244,7 +313,7 @@ export function WorkspaceShell({
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">{!activeSlug ? <div className="flex-1 flex items-center justify-center text-gh-fg-muted text-gh-sm">Crea il tuo primo documento per iniziare a scrivere.</div> : <><div className="flex items-center justify-between px-4 py-2 bg-gh-canvas-subtle border-b border-gh-border flex-shrink-0 gap-2"><div className="flex items-center gap-3 min-w-0"><span className="font-mono text-gh-xs font-semibold text-gh-fg-muted uppercase tracking-wider hidden sm:inline truncate max-w-[180px]">{activeDoc?.title || "Markdown"}</span><span className="font-mono text-gh-xs text-gh-fg-subtle hidden lg:inline">· $…$ · $$…$$ · Cmd+S</span></div><div className="flex items-center gap-2 flex-shrink-0"><SaveIndicator state={saveState} /><button onClick={() => setShowPreview((v) => !v)} className={["flex items-center gap-1.5 px-2.5 py-1 text-gh-xs font-semibold rounded-gh border transition-colors", showPreview ? "bg-gh-accent-subtle text-gh-accent-fg border-gh-accent/30" : "bg-gh-canvas text-gh-fg-muted border-gh-border hover:bg-gh-canvas-subtle"].join(" ")}><svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2C4.691 2 1.75 4.109 1.75 8S4.691 14 8 14s6.25-2.109 6.25-6S11.309 2 8 2Zm0 11C5.239 13 2.75 11.225 2.75 8S5.239 3 8 3s5.25 1.775 5.25 5S10.761 13 8 13Zm0-8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7ZM5.5 8a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0Z" /></svg><span className="hidden sm:inline">{showPreview ? "Preview on" : "Preview off"}</span></button></div></div><div className={`flex-1 overflow-hidden grid ${showPreview ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}><div className={`flex flex-col overflow-hidden ${showPreview ? "border-b md:border-b-0 md:border-r border-gh-border" : ""}`}><textarea ref={textareaRef} value={content} onChange={(e) => handleContentChange(e.target.value)} spellCheck={false} className="flex-1 w-full resize-none border-none outline-none bg-gh-canvas p-4 text-gh-fg leading-relaxed" style={{ tabSize: 2, fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace", fontSize: "13px", lineHeight: "1.75" }} placeholder={PLACEHOLDER} /></div>{showPreview && <div className="flex flex-col overflow-hidden bg-gh-canvas"><div ref={previewScrollRef} className="flex-1 overflow-auto p-6">{rawHtml ? <div className="prose" dangerouslySetInnerHTML={{ __html: rawHtml }} /> : <div className="h-full flex items-center justify-center text-gh-fg-subtle text-gh-sm">Inizia a scrivere per vedere l'anteprima</div>}</div></div>}</div></>}</div>
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">{!activeSlug ? <div className="flex-1 flex items-center justify-center text-gh-fg-muted text-gh-sm">Crea il tuo primo documento per iniziare a scrivere.</div> : <><div className="flex items-center justify-between px-4 py-2 bg-gh-canvas-subtle border-b border-gh-border flex-shrink-0 gap-2"><div className="flex items-center gap-3 min-w-0"><span className="font-mono text-gh-xs font-semibold text-gh-fg-muted uppercase tracking-wider hidden sm:inline truncate max-w-[180px]">{activeDoc?.title || "Markdown"}</span><span className="font-mono text-gh-xs text-gh-fg-subtle hidden lg:inline">· $…$ · $$…$$ · Cmd+S</span></div><div className="flex items-center gap-2 flex-shrink-0"><SaveIndicator state={saveState} /><button onClick={() => setShowPreview((v) => !v)} className={["flex items-center gap-1.5 px-2.5 py-1 text-gh-xs font-semibold rounded-gh border transition-colors", showPreview ? "bg-gh-accent-subtle text-gh-accent-fg border-gh-accent/30" : "bg-gh-canvas text-gh-fg-muted border-gh-border hover:bg-gh-canvas-subtle"].join(" ")}><svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2C4.691 2 1.75 4.109 1.75 8S4.691 14 8 14s6.25-2.109 6.25-6S11.309 2 8 2Zm0 11C5.239 13 2.75 11.225 2.75 8S5.239 3 8 3s5.25 1.775 5.25 5S10.761 13 8 13Zm0-8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7ZM5.5 8a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0Z" /></svg><span className="hidden sm:inline">{showPreview ? "Preview on" : "Preview off"}</span></button></div></div>{errorMessage && <div className="px-4 py-2 border-b border-red-200 bg-red-50 text-red-700 text-gh-xs font-semibold">{errorMessage}</div>}<div className={`flex-1 overflow-hidden grid ${showPreview ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}><div className={`flex flex-col overflow-hidden ${showPreview ? "border-b md:border-b-0 md:border-r border-gh-border" : ""}`}><textarea ref={textareaRef} value={content} onChange={(e) => handleContentChange(e.target.value)} spellCheck={false} className="flex-1 w-full resize-none border-none outline-none bg-gh-canvas p-4 text-gh-fg leading-relaxed" style={{ tabSize: 2, fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace", fontSize: "13px", lineHeight: "1.75" }} placeholder={PLACEHOLDER} /></div>{showPreview && <div className="flex flex-col overflow-hidden bg-gh-canvas"><div ref={previewScrollRef} className="flex-1 overflow-auto p-6">{rawHtml ? <div className="prose" dangerouslySetInnerHTML={{ __html: rawHtml }} /> : <div className="h-full flex items-center justify-center text-gh-fg-subtle text-gh-sm">Inizia a scrivere per vedere l'anteprima</div>}</div></div>}</div></>}</div>
     </div>
   );
 }

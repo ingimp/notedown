@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getCollection } from "@/core/notedown/storage";
 import { renderCollection } from "@/core/notedown/rendering";
 import { buildEditorDocumentPath, buildEditorCollectionPath, buildPreviewCollectionPath, buildPreviewDocumentPath } from "@/core/notedown/paths";
@@ -14,6 +14,10 @@ export default async function PreviewPage({
   const rendered = await renderCollection(collection);
   const docs = rendered.docs;
   const requestedSlug = docSlug?.[0];
+
+  if (!requestedSlug && docs[0]) {
+    redirect(buildPreviewDocumentPath(username, collectionSlug, docs[0].slug));
+  }
 
   if (!requestedSlug) {
     return (
