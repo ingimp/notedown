@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createCollection, listCollections } from "@/core/notedown/storage";
 import { DeleteCollectionButton } from "./delete-collection-button";
-import { SearchTrigger } from "@/components/search-trigger";
 
 export default async function DashboardPage() {
   const collections = await listCollections();
@@ -28,7 +27,6 @@ export default async function DashboardPage() {
             <span className="text-gh-header-text font-semibold text-gh-md">Notedown</span>
           </div>
           <div className="flex items-center gap-2">
-            <SearchTrigger />
             <span className="text-gh-header-muted font-mono text-gh-xs">anonymous</span>
           </div>
         </div>
