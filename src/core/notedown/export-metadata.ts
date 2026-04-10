@@ -1,8 +1,13 @@
 import type { RenderedSiteDoc } from "./types.ts";
 
-export const buildPublicationMetadata = (input: { title: string; slug: string; username: string }) => ({
+export const buildPublicationMetadata = (input: {
+  title: string;
+  slug: string;
+  username: string;
+  generatedAt: string;
+}) => ({
   formatVersion: "0.1",
-  kind: "notedown-export",
+  kind: "publication",
   title: input.title,
   slug: input.slug,
   author: {
@@ -10,6 +15,7 @@ export const buildPublicationMetadata = (input: { title: string; slug: string; u
   },
   entrypoint: "index.html",
   documentsIndex: "documents.json",
+  generatedAt: input.generatedAt,
 });
 
 export const buildDocumentsMetadata = (docs: Array<Pick<RenderedSiteDoc, "slug" | "title">>) => ({

@@ -177,6 +177,7 @@ export const buildStaticSiteZip = async (username: string, collectionSlug: strin
     title: rendered.collection.title,
     slug: rendered.collection.slug,
     username: rendered.collection.username,
+    generatedAt: new Date().toISOString(),
   });
   zip.file(`${root}/publication.json`, JSON.stringify(publicationMetadata, null, 2));
 

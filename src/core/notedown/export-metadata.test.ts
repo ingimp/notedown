@@ -4,15 +4,17 @@ import assert from "node:assert/strict";
 import { buildDocumentsMetadata, buildPublicationMetadata } from "./export-metadata.ts";
 
 test("buildPublicationMetadata keeps title and slug collection-local and sets index references", () => {
+  const generatedAt = "2026-04-10T20:19:56.000Z";
   const publication = buildPublicationMetadata({
     title: "Appunti di Analisi Matematica",
     slug: "appunti-di-analisi-matematica",
     username: "anonymous",
+    generatedAt,
   });
 
   assert.deepEqual(publication, {
     formatVersion: "0.1",
-    kind: "notedown-export",
+    kind: "publication",
     title: "Appunti di Analisi Matematica",
     slug: "appunti-di-analisi-matematica",
     author: {
@@ -20,6 +22,7 @@ test("buildPublicationMetadata keeps title and slug collection-local and sets in
     },
     entrypoint: "index.html",
     documentsIndex: "documents.json",
+    generatedAt,
   });
 });
 
