@@ -7,6 +7,8 @@ export type NoteDocMeta = {
 
 export type NotesManifest = {
   id: string;
+  username: string;
+  slug: string;
   title: string;
   description: string;
   docs: NoteDocMeta[];
@@ -42,6 +44,8 @@ export type RenderedSiteDoc = {
 export type RenderedSite = {
   collection: {
     id: string;
+    username: string;
+    slug: string;
     title: string;
     description: string;
     overviewHref: string;

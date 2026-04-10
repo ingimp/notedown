@@ -3,11 +3,11 @@ import { deleteCollection } from "@/core/notedown/storage";
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ username: string; collectionSlug: string }> }
 ) {
   try {
-    const { id } = await params;
-    await deleteCollection(id);
+    const { username, collectionSlug } = await params;
+    await deleteCollection(username, collectionSlug);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

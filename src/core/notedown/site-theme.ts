@@ -297,16 +297,28 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--gh-border);
 }
 .nd-docnav a {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--gh-accent);
   text-decoration: none;
+  font-weight: 500;
+  min-width: 0;
 }
 .nd-docnav a:hover { text-decoration: underline; }
-.nd-docnav-label { display: block; font-size: 11px; color: var(--gh-fg-muted); font-weight: 400; margin-bottom: 2px; }
-.nd-docnav-next { flex-direction: row-reverse; text-align: right; }
+.nd-docnav-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nd-docnav-arrow {
+  color: var(--gh-fg-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.nd-docnav-next { margin-left: auto; text-align: right; }
+.nd-docnav-spacer { flex: 1; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
