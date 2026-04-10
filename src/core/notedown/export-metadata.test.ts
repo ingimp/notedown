@@ -14,7 +14,7 @@ test("buildPublicationMetadata keeps title and slug collection-local and sets in
 
   assert.deepEqual(publication, {
     formatVersion: "0.1",
-    kind: "publication",
+    kind: "notes",
     title: "Appunti di Analisi Matematica",
     slug: "appunti-di-analisi-matematica",
     author: {

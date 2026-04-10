@@ -7,7 +7,7 @@ export const buildPublicationMetadata = (input: {
   generatedAt: string;
 }) => ({
   formatVersion: "0.1",
-  kind: "publication",
+  kind: "notes",
   title: input.title,
   slug: input.slug,
   author: {
